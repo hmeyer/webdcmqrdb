@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Wim Dumon, Koen Deforche
+ * Copyright (C) 2008 Emweb bvba, Heverlee, Belgium.
  *
  * See the LICENSE file for terms of use.
  */
@@ -45,7 +45,7 @@ HelloApplication::HelloApplication(const WEnvironment& env)
   nameEdit_->setFocus();                                 // give focus
 
   WPushButton *b = new WPushButton("Greet me.", root()); // create a button
-  b->setMargin(5, WWidget::Left);                        // add 5 pixels margin 
+  b->setMargin(5, Left);                                 // add 5 pixels margin
 
   root()->addWidget(new WBreak());                       // insert a line break
 
@@ -53,9 +53,16 @@ HelloApplication::HelloApplication(const WEnvironment& env)
 
   /*
    * Connect signals with slots
+   *
+   * - simple Wt-way
    */
-  b->clicked.connect(SLOT(this, HelloApplication::greet));
-  nameEdit_->enterPressed.connect(SLOT(this, HelloApplication::greet));
+  b->clicked().connect(this, &HelloApplication::greet);
+
+  /*
+   * - using an arbitrary function object (binding values with boost::bind())
+   */
+  nameEdit_->enterPressed().connect
+    (boost::bind(&HelloApplication::greet, this));
 }
 
 void HelloApplication::greet()

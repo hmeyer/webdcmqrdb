@@ -1,8 +1,10 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
+SET(CMAKE_BUILD_TYPE Debug)
+
 PROJECT(Webdcmqrdb)
 
-SET (WT_CONNECTOR "wtfcgi" CACHE STRING "Connector used (wthttp or wtfcgi)")
+SET (WT_CONNECTOR "wthttp" CACHE STRING "Connector used (wthttp or wtfcgi)")
 
 ADD_SUBDIRECTORY(src)
 
