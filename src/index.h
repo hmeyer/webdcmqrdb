@@ -3,10 +3,13 @@
 
 #include <string>
 #include <boost/scoped_ptr.hpp>
+#include <map>
 #include <vector>
 #include <algorithm>
+#include <boost/thread/mutex.hpp>
 
 #include "dcmtk/dcmdata/dctagkey.h"
+#include "dcmtk/dcmnet/dicom.h"
 
 
 #include "dcmtk/dcmqrdb/dcmqrdbl.h"
@@ -18,59 +21,50 @@ using namespace Wt;
 
 extern const string emptyString;
 
+enum DicomLevel {
+  StudyLevel,
+  SerieLevel,
+  ImageLevel
+};
+
 template< class DType >
-class DataList:public WAbstractTableModel {
+class DataList:public WAbstractTableModel, public vector< DType > {
   public:
     typedef DType DataType;
-    typedef std::vector< DataType > DataContainter;
     int columnCount(const WModelIndex &parent = WModelIndex()) const;
     int rowCount(const WModelIndex &parent = WModelIndex()) const;
     boost::any data(const WModelIndex &index, int role = DisplayRole) const;
     boost::any headerData(int section, Orientation orientation = Horizontal, int role = DisplayRole) const;
-    DataType &operator[]( int i ) { return myData[i]; }
-    void push_back(const DataType &d) { myData.push_back(d); }
-    void clear(void) { myData.clear(); }
     const std::string &getUID(int index) const;
-  private:
-  DataContainter myData;
 };
 
+typedef map< DcmTagKey, string > TagMap;
 typedef vector< string > StringList;
 typedef vector< DcmTagKey > TagList;
 
-template< class ElementData >
-class GetFromTag {
+class ElementData: public TagMap {
   public:
-  const string &getFromTag( const DcmTagKey &tag ) const {
-    const ElementData *this_ = static_cast< const ElementData* >(this);
-    TagList::const_iterator pos = find(ElementData::tags.begin(), ElementData::tags.end(), tag);
-    return *(this_->begin() + distance(ElementData::tags.begin(), pos) );
-  }
+  const string &getFromTag( const DcmTagKey &tag ) const;
+  void insertData( const ElementData &other );
+  virtual const string &getUID() const = 0;
 };
 
-class StudyData: public StringList, public GetFromTag< StudyData > {
+class StudyData: public ElementData {
   public:
     static const TagList tags;
     static const StringList headers;
-    StudyData():StringList( tags.size() ) {}
-    void t() {
-      DcmTagKey x;
-      ;
-    }
     const string &getUID() const;
 };
-class SerieData: public StringList {
+class SerieData: public ElementData {
   public:
     static const TagList tags;
     static const StringList headers;
-    SerieData():StringList( tags.size() ) {}
     const string &getUID() const;
 };
-class ImageData: public StringList {
+class ImageData: public ElementData {
   public:
     static const TagList tags;
     static const StringList headers;
-    ImageData():StringList( tags.size() ) {}
     const string &getUID() const;
 };
 
@@ -78,17 +72,27 @@ typedef DataList< StudyData > StudyList;
 typedef DataList< SerieData > SerieList;
 typedef DataList< ImageData > ImageList;
 
+
+struct MoveJob {
+  DIC_UI sopClass;
+  DIC_UI sopInstance;
+  char imgFile[MAXPATHLEN+1];
+};
+
 class Index {
 public:
   typedef std::vector< DcmTagKey > TagList;
+  typedef std::vector< MoveJob > MoveJobList;
   Index( const string &path );
   void findStudies( const string &filter, StudyList &studies );
-  void getSeries( const vector< string > &studyUIDs, SerieList &series );
-  void getImages( const vector< string > &serieUIDs, ImageList &images );
+  void getSeries( const vector< StudyData* > &studyUIDs, SerieList &series );
+  void getImages( const vector< SerieData* > &serieUIDs, ImageList &images );
+  void moveRequest(DicomLevel level, const string &uid, MoveJobList &result);
 private:
   template< class DataListType >
   void dicomFind( const string &qrlevel, const string &QRModel, const string &param, const DcmTagKey &paramTag, const TagList &tags, DataListType &result );
   scoped_ptr<DcmQueryRetrieveDatabaseHandle> dbHandle;
+  boost::mutex index_mutex_;
 };
 
 template< class DataType >
@@ -97,15 +101,16 @@ int DataList<DataType>::columnCount(const WModelIndex &parent) const {
 }
 template< class DataType >
 int DataList<DataType>::rowCount(const WModelIndex &parent) const {
-  return myData.size();
+  return this->size();
 }
 template< class DataType >
 boost::any DataList<DataType>::data(const WModelIndex &index, int role) const {
-  return boost::any( myData[ index.row() ][index.column()] );
+  DcmTagKey t = DataType::tags[index.column()];
+  return (*this)[ index.row() ].getFromTag(t);
 }
 template< class DataType >
 const string &DataList<DataType>::getUID(int index) const {
-  if ( index < myData.size() ) return myData[ index ].getUID();
+  if ( index < this->size() ) return (*this)[ index ].getUID();
   else return emptyString;
 }
 template< class DataType >

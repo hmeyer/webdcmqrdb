@@ -6,14 +6,14 @@
 
 #include <Wt/WApplication>
 #include <Wt/WContainerWidget>
-#include <Wt/WLayout>
+#include <Wt/WTabWidget>
+#include <Wt/WVBoxLayout>
 
 
 #include <Wt/Ext/LineEdit>
 #include <Wt/Ext/Button>
 #include <Wt/Ext/TableView>
 #include <Wt/Ext/ToolBar>
-#include <Wt/Ext/TabWidget>
 
 #include <boost/lexical_cast.hpp>
 
@@ -40,10 +40,11 @@ void wstring2string( const wstring &w, string &s) {
 }
 
 typedef shared_ptr< Index > IndexPtr;
-typedef shared_ptr< DicomSender > SenderPtr;
+typedef shared_ptr< Sender > SenderPtr;
 
-  IndexPtr myIndex;
-  SenderPtr mySender;
+const string emptyString;
+IndexPtr myIndex;
+SenderPtr mySender;
 
 /*
  * A simple hello world application class which demonstrates how to react
@@ -64,6 +65,8 @@ private:
   Ext::TableView *studyTable_;
   Ext::TableView *serieTable_;
   Ext::TableView *imageTable_;
+  Ext::TableView *jobTable_;
+  boost::signals::scoped_connection onUpdateJobConnection_;
   IndexPtr index_;
   SenderPtr sender_;
   StudyList studies_;
@@ -89,25 +92,31 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
 {
   setTitle("Dicom-Web-DataBase");                               // application title
   
-  Ext::TabWidget *tabs = new Ext::TabWidget();
-  Ext::Panel *searchPanel = new Ext::Panel(); searchPanel->setTitle("Search");
-  Ext::Panel *jobsPanel = new Ext::Panel(); jobsPanel->setTitle("Jobs");
-  Ext::Panel *configPanel = new Ext::Panel(); configPanel->setTitle("Config");
-  tabs->addTab( searchPanel );
-  tabs->addTab( jobsPanel );
-  tabs->addTab( configPanel );
+  WTabWidget *tabs = new WTabWidget();
+  WContainerWidget *searchContainer = new WContainerWidget();
+  WContainerWidget *jobContainer = new WContainerWidget();
+  WContainerWidget *configContainer = new WContainerWidget();
+  tabs->addTab( searchContainer, "Search Patients" );
+  tabs->addTab( jobContainer, "Jobs" );
+  tabs->addTab( configContainer, "Config" );
+//  tabs->addTab( jobsPanel );
+//  tabs->addTab( configPanel );
   
   root()->addWidget( tabs );
+//  root()->resize( WLength(100, WLength::FontEm) , WLength(100, WLength::FontEm) );
+  tabs->resize( WLength::Auto , WLength(100, WLength::Percentage) );
+//  searchContainer->resize( WLength(100, WLength::FontEm) , WLength(100, WLength::FontEm) );
 
   searchEdit_ = new Ext::LineEdit();                     // allow text input
   searchEdit_->setFocus();                                 // give focus
-  root()->addWidget( searchEdit_ );
+  
+  searchContainer->addWidget( searchEdit_ );
 
   Ext::Button *b = new Ext::Button("Search"); // create a button
   b->setMargin(5, Left);                                 // add 5 pixels margin
-  root()->addWidget( b );
+  searchContainer->addWidget( b );
 
-  root()->addWidget(new WBreak() );                       // insert a line break
+  searchContainer->addWidget(new WBreak() );                       // insert a line break
 
   studyTable_ = new Ext::TableView();
   studyTable_->setModel( &studies_ );
@@ -122,7 +131,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   sendStudiesButton_->clicked().connect( boost::bind(&DcmQRDBApplication::sendStudies, this) );
   studyTable_->bottomToolBar()->add( sendStudiesButton_ );
   studyTable_->resize( WLength::Auto, WLength(16, WLength::FontEm) );
-  root()->addWidget( studyTable_ );
+  searchContainer->addWidget( studyTable_ );
 
   serieTable_ = new Ext::TableView();
   serieTable_->setModel( &series_ );
@@ -137,7 +146,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   sendSeriesButton_->clicked().connect( boost::bind(&DcmQRDBApplication::sendSeries, this) );
   serieTable_->bottomToolBar()->add( sendSeriesButton_ );
   serieTable_->resize( WLength::Auto, WLength(9, WLength::FontEm) );
-  root()->addWidget( serieTable_ );
+  searchContainer->addWidget( serieTable_ );
 
   imageTable_ = new Ext::TableView();
   imageTable_->setModel( &images_ );
@@ -152,7 +161,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   sendImagesButton_->clicked().connect( boost::bind(&DcmQRDBApplication::sendImages, this) );
   imageTable_->bottomToolBar()->add( sendImagesButton_ );
   imageTable_->resize( WLength::Auto, WLength(9, WLength::FontEm) );
-  root()->addWidget( imageTable_ );  
+  searchContainer->addWidget( imageTable_ );  
   /*
    * Connect signals with slots
    *
@@ -167,6 +176,18 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
    */
   searchEdit_->keyWentUp().connect
     (boost::bind(&DcmQRDBApplication::searchIndex, this, true));
+    
+    
+  jobTable_ = new Ext::TableView();
+  jobTable_->setModel( &sender_->getTableModel() );
+  jobTable_->setDataLocation(Ext::ServerSide);
+  jobTable_->setSelectionBehavior(SelectRows);
+  jobTable_->setSelectionMode(ExtendedSelection);
+  jobTable_->setPageSize(20);
+  jobTable_->resize( WLength::Auto, WLength(30, WLength::FontEm) );
+  jobTable_->setBottomToolBar(jobTable_->createPagingToolBar());
+  jobContainer->addWidget( jobTable_ );
+    
 }
 
 
@@ -175,9 +196,9 @@ void DcmQRDBApplication::studySelectionChanged(void) {
   const std::vector< int > &rows = studyTable_->selectedRows();
   if (rows.size() > 0) {
     sendStudiesButton_->enable();
-    vector< string > stlist;
+    vector< StudyData* > stlist;
     for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++)
-      stlist.push_back( studies_.getUID(*i) );
+      stlist.push_back( &studies_[*i] );
     index_->getSeries( stlist, series_ );
     serieTable_->setModel( &series_ );
   }
@@ -191,9 +212,13 @@ void DcmQRDBApplication::serieSelectionChanged(void) {
   const std::vector< int > &rows = serieTable_->selectedRows();
   if (rows.size() > 0) {
     sendSeriesButton_->enable();
-    vector< string > selist;
-    for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++)
-      selist.push_back( series_.getUID(*i) );
+    vector< SerieData* > selist;
+    for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++) {
+      string uid;
+      uid = series_.getUID( *i );
+      cerr << "in " << __FUNCTION__ << " retrieved uid:" << uid << endl;
+      selist.push_back( &series_[*i] );
+    }
     index_->getImages( selist, images_ );
     imageTable_->setModel( &images_ );
   }
@@ -203,8 +228,8 @@ void DcmQRDBApplication::serieSelectionChanged(void) {
   }
 }
 void DcmQRDBApplication::imageSelectionChanged(void) {
-  if (imageTable_->selectedRows().size() > 0) sendSeriesButton_->enable();
-  else sendSeriesButton_->disable();
+  if (imageTable_->selectedRows().size() > 0) sendImagesButton_->enable();
+  else sendImagesButton_->disable();
 }
 void DcmQRDBApplication::sendStudies(void) {
   const std::vector< int > &rows = studyTable_->selectedRows();
@@ -213,8 +238,8 @@ void DcmQRDBApplication::sendStudies(void) {
     sender_->queueJob( StudyLevel, stData.getUID(), 
       str( format("%1% Study[%2%]: %3%") 
 	% stData.getFromTag( DCM_PatientsName ) 
-	% stData[3] // TODO: replace with tags
-	% stData[5])  );
+	% stData.getFromTag( DCM_StudyID )
+	% stData.getFromTag( DCM_StudyDescription )  ));
   }
 }
 void DcmQRDBApplication::sendSeries(void) {
@@ -222,9 +247,11 @@ void DcmQRDBApplication::sendSeries(void) {
   for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++) {
     SerieData &serData = series_[*i];
     sender_->queueJob( SerieLevel, serData.getUID(),
-      str( format("%1% Study[%2%]: %3% %5%-Series[%4%]:%6%") 
-	% serData[4] % serData[5] % serData[6] % serData[0] 
-	% serData[1] % serData[2])  );
+      str( format("%1% Study[%2%]: %3% %4%-Series[%5%]:%6%") 
+	% serData.getFromTag( DCM_PatientsName ) 
+	% serData.getFromTag( DCM_StudyID )
+	% serData.getFromTag( DCM_StudyDescription )
+	% serData.getFromTag( DCM_Modality ) % serData.getFromTag( DCM_SeriesNumber ) % serData.getFromTag( DCM_SeriesDescription ))  );
   }
 }
 void DcmQRDBApplication::sendImages(void) {
@@ -232,9 +259,12 @@ void DcmQRDBApplication::sendImages(void) {
   for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++) {
     ImageData &imData = images_[*i];
     sender_->queueJob( ImageLevel, imData.getUID(),
-      str( format("%1% Study[%2%]: %3% %5%-Series[%4%]:%6% Image[%7%]") 
-	% imData[3] % imData[4] % imData[5] % imData[7] 
-	% imData[8] % imData[9] % imData[0])  );
+      str( format("%1% Study[%2%]: %3% %4%-Series[%5%]:%6% Image[%7%]") 
+	% imData.getFromTag( DCM_PatientsName ) 
+	% imData.getFromTag( DCM_StudyID )
+	% imData.getFromTag( DCM_StudyDescription )
+	% imData.getFromTag( DCM_Modality ) % imData.getFromTag( DCM_SeriesNumber ) % imData.getFromTag( DCM_SeriesDescription )
+	% imData.getFromTag( DCM_InstanceNumber ))  );
   }
 }
 
@@ -258,7 +288,7 @@ WApplication *createApplication(const WEnvironment& env)
 int main(int argc, char **argv)
 {
   myIndex.reset(new Index("/home/hmeyer/tmp/"));
-  mySender.reset(new DicomSender());
+  mySender.reset(new Sender( *myIndex ));
   return WRun(argc, argv, &createApplication);
 }
 

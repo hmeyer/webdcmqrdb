@@ -20,8 +20,8 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/foreach.hpp>
 
-
 #include <iostream>
+
 
 using namespace std;
 using namespace boost;
@@ -39,18 +39,16 @@ const TagList ImageData::tags = assign::list_of(DCM_InstanceNumber)(DCM_Transfer
   
   
 const StringList StudyData::headers = assign::list_of("Name")("Date of Birth")("PatientID")
-  ("StudyID")("Date")("Description")("Referring Physician")("Institution")
+  ("StudyID")("Date of Study")("Description")("Referring Physician")("Institution")
   ("Department")("UID");
 
 const StringList SerieData::headers = assign::list_of("Number")("Modality")("Description")("UID");
 
 const StringList ImageData::headers = assign::list_of("Number")("TransferSyntax")("UID");
 
-const string emptyString;
-
-const string &StudyData::getUID() const { return (*this)[9]; }
-const string &SerieData::getUID() const { return (*this)[3]; }
-const string &ImageData::getUID() const { return (*this)[2]; }
+const string &StudyData::getUID() const { return getFromTag(DCM_StudyInstanceUID); }
+const string &SerieData::getUID() const { return getFromTag(DCM_SeriesInstanceUID); }
+const string &ImageData::getUID() const { return getFromTag(DCM_SOPInstanceUID); }
 
 Index::Index( const string &path ) {
   OFCondition dbcond = EC_Normal;
@@ -63,6 +61,11 @@ Index::Index( const string &path ) {
 
 template< class DataListType >
 void Index::dicomFind( const string &qrlevel, const string &QRModel, const string &param, const DcmTagKey &paramTag, const TagList &tags, DataListType &result ) {
+//#ifdef DEBUG
+cerr << __FUNCTION__ << " qrlevel:" << qrlevel << " QRModel:" << QRModel << " param:" << param << " paramTag:" << paramTag.toString().c_str() << endl;
+//#endif
+  if (param.size() == 0) throw new runtime_error("cannot query index with zero-length query-parameter");
+  
     OFCondition dbcond = EC_Normal;
     DcmQueryRetrieveDatabaseStatus dbStatus(STATUS_Pending);
     DcmDatasetPtr query;
@@ -79,23 +82,25 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
    
     DcmDatasetPtr reply;
     
+    boost::mutex::scoped_lock lock(index_mutex_);  // TODO: index pool
+    
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
-    if (dbcond.bad()) throw new std::runtime_error( string("cannot query database:") );
+    if (dbcond.bad()) throw new std::runtime_error( "cannot query database:" );
 
     dbStatus.deleteStatusDetail();
     while(dbStatus.status() == STATUS_Pending) {
 	DcmDataset *tr;
         dbcond = dbHandle->nextFindResponse(&tr, &dbStatus);
 	reply.reset(tr);
-	if (dbcond.bad()) throw new std::runtime_error( string("database error"));
+	if (dbcond.bad()) throw new std::runtime_error( "database error" );
         if (dbStatus.status() == STATUS_Pending) {
 	  OFString t;
 	  typename DataListType::DataType item;
 	  unsigned int c = 0;
 	  for(TagList::const_iterator i = tags.begin(); i!= tags.end(); i++) {
 	    reply->findAndGetOFString(*i, t); 
-	    item[c++] = t.c_str();
+	    item[*i] = t.c_str();
 	  }
 	  result.push_back( item );
         }
@@ -107,15 +112,67 @@ void Index::findStudies( const string &filter, StudyList &studies ) {
   dicomFind( "STUDY", UID_FINDStudyRootQueryRetrieveInformationModel, filter, DCM_PatientsName, StudyData::tags, studies );
 }
 
-void Index::getSeries( const vector< string > &studyUIDs, SerieList &series ) {
+void Index::getSeries( const vector< StudyData* > &studies, SerieList &series ) {
   series.clear();
-  BOOST_FOREACH( string studyUID, studyUIDs ) {
-    dicomFind( "SERIES", UID_FINDStudyRootQueryRetrieveInformationModel, studyUID, DCM_StudyInstanceUID, SerieData::tags, series );
+  BOOST_FOREACH( StudyData *study, studies ) {
+    dicomFind( "SERIES", UID_FINDStudyRootQueryRetrieveInformationModel, study->getUID(), DCM_StudyInstanceUID, SerieData::tags, series );
+    BOOST_FOREACH( SerieData &serie, series ) {
+      serie.insertData( *study );
+    }
   }
 }
-void Index::getImages( const vector< string > &serieUIDs, ImageList &images ) {
+void Index::getImages( const vector< SerieData* > &series, ImageList &images ) {
   images.clear();
-  BOOST_FOREACH( string serieUID, serieUIDs ) {
-    dicomFind( "IMAGE", UID_FINDStudyRootQueryRetrieveInformationModel, serieUID, DCM_SeriesInstanceUID, ImageData::tags, images );
+  BOOST_FOREACH( SerieData *serie, series ) {
+    dicomFind( "IMAGE", UID_FINDStudyRootQueryRetrieveInformationModel, serie->getUID(), DCM_SeriesInstanceUID, ImageData::tags, images );
+    BOOST_FOREACH( ImageData &image, images ) {
+      image.insertData( *serie );
+    }
   }
 }
+
+const string &ElementData::getFromTag( const DcmTagKey &tag ) const {
+  ElementData::const_iterator pos = find(tag);
+  if (pos != this->end()) return pos->second;
+  return emptyString;
+}
+
+void ElementData::insertData( const ElementData &other) {
+  BOOST_FOREACH( const ElementData::value_type &pair, other ) {
+    this->insert( pair );
+  }
+}
+
+void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result) {
+  string QRModel = UID_MOVEStudyRootQueryRetrieveInformationModel;
+  string qrlevel; DcmTagKey uidTag;
+  DcmQueryRetrieveDatabaseStatus dbStatus(STATUS_Pending);
+  
+  switch (level) {
+    case StudyLevel: qrlevel = "STUDY"; uidTag = DCM_StudyInstanceUID; break;
+    case SerieLevel: qrlevel = "SERIES"; uidTag = DCM_SeriesInstanceUID; break;
+    case ImageLevel: qrlevel = "IMAGE"; uidTag = DCM_SOPInstanceUID; break;
+  }
+  DcmDataset query;
+  DU_putStringDOElement(&query, DCM_QueryRetrieveLevel, qrlevel.c_str());
+  DU_putStringDOElement(&query, uidTag, uid.c_str());
+  OFCondition dbcond = EC_Normal;
+
+  boost::mutex::scoped_lock lock(index_mutex_);  // TODO: index pool
+  
+  dbcond = dbHandle->startMoveRequest(
+      QRModel.c_str(), &query, &dbStatus);      
+      
+  if (dbcond.bad()) throw new std::runtime_error( "cannot query database:" );
+
+  MoveJob currentJob;
+  DIC_US nRemaining = 0;
+  while (dbStatus.status() == STATUS_Pending) {
+      dbcond = dbHandle->nextMoveResponse(currentJob.sopClass, currentJob.sopInstance,
+	  currentJob.imgFile, &nRemaining, &dbStatus);
+      if (dbStatus.status() == STATUS_Pending) result.push_back( currentJob );
+      if (dbcond.bad())
+	  throw new std::runtime_error("database error");
+  }
+}
+

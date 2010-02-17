@@ -1,6 +1,6 @@
-SET(WT_PROJECT_SOURCE
+SET(WT_PROJECT_SOURCE 
 main.cc
-index.cc sender.cc
+index.cc sender.cc dicomsender.cpp
 )
 
 SET(WT_PROJECT_TARGET dcmqrdb.wt)
@@ -30,4 +30,4 @@ INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmqrdb/include)
 ADD_DEFINITIONS(-DHAVE_CONFIG_H)
 
 
-TARGET_LINK_LIBRARIES(${WT_PROJECT_TARGET} ${WT_CONNECTOR} wt wtext dcmqrdb dcmdata dcmnet clucene-core ofstd)
+TARGET_LINK_LIBRARIES(${WT_PROJECT_TARGET} ${WT_CONNECTOR} wt wtext dcmqrdb dcmnet dcmdata clucene-core ofstd)
