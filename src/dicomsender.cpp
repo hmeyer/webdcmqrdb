@@ -32,7 +32,7 @@ DicomSender::DicomSender( const string &localAE, DicomConfig::PeerInfoPtr peer, 
   assoc_(NULL), net_(NULL), blockMode_(DIMSE_BLOCKING), dimse_timeout_(0), maxReceivePDULength_(16384),
   networkTransferSyntax_(EXS_Unknown), currentNode_( peer ), currentAETitle_( localAE ) {
   OFCondition cond = ASC_initializeNetwork( NET_REQUESTOR, 0, acse_timeout, &net_ );
-  if (cond.bad()) throw new runtime_error( str( 
+  if (cond.bad()) throw runtime_error( str( 
     format("Could not initialize Network:%1%") % cond.text() ) );
 }
 
@@ -149,11 +149,11 @@ void DicomSender::addPresentationContexts(T_ASC_Parameters &params) {
 void DicomSender::attachAssociation() {
     if (assoc_ != NULL) detachAssociation(false);
 
-    if (!currentNode_) throw new runtime_error("Cannot open association to undefined node");
+    if (!currentNode_) throw runtime_error("Cannot open association to undefined node");
 
     T_ASC_Parameters *params;
     OFCondition cond = ASC_createAssociationParameters(&params, maxReceivePDULength_);
-    if (cond.bad()) throw new runtime_error( str( 
+    if (cond.bad()) throw runtime_error( str( 
       format("Help, cannot create association parameters:%1%") % cond.text() ) );
     ASC_setAPTitles(params, currentAETitle_.c_str(), currentNode_->AETitle.c_str(), NULL);
 
@@ -161,7 +161,7 @@ void DicomSender::attachAssociation() {
     gethostname(localHost, sizeof(localHost) - 1);
     if (currentNode_->hostName.size() == 0 || currentNode_->portNumber== 0) {
       ASC_destroyAssociationParameters(&params);
-      throw new runtime_error( str(
+      throw runtime_error( str(
       format( "Cannot open association to %1%:%2%" ) % currentNode_->hostName % currentNode_->portNumber ));
     }
     string presentationAddress(str(format("%1%:%2%") % currentNode_->hostName % currentNode_->portNumber));
@@ -178,12 +178,12 @@ void DicomSender::attachAssociation() {
 	    ASC_printRejectParameters( rejString, &rej );
             ASC_dropAssociation(assoc_);
             ASC_destroyAssociation(&assoc_);
-	    throw new runtime_error( str( 
+	    throw runtime_error( str( 
 	      format("Association Rejected:%1%") % rejString.str() ) );
         } else {
             ASC_dropAssociation(assoc_);
             ASC_destroyAssociation(&assoc_);
-	    throw new runtime_error( str( 
+	    throw runtime_error( str( 
 	      format("Association Request Failed: Peer (%1%, %2%):%3%") % presentationAddress % currentNode_->AETitle % cond.text() ) );
         }
     }
@@ -191,7 +191,7 @@ void DicomSender::attachAssociation() {
         ASC_abortAssociation(assoc_);
         ASC_dropAssociation(assoc_);
         ASC_destroyAssociation(&assoc_);
-	throw new runtime_error( str( 
+	throw runtime_error( str( 
 	  format("All Presentation Contexts Refused: Peer (%1%, %2%)") % presentationAddress % currentNode_->AETitle ) );
     }
     updateStatus_( str( format( "New Association Started (%1%,%2%)" ) % presentationAddress % currentNode_->AETitle ) );
@@ -202,7 +202,7 @@ void DicomSender::changeAssociation() {
         /* do we really need to change the association */
 	DIC_AE actualPeerAETitle;
 	ASC_getAPTitles(assoc_->params, NULL, actualPeerAETitle, NULL);
-	if (!currentNode_) throw new runtime_error("Cannot change association to undefined node");
+	if (!currentNode_) throw runtime_error("Cannot change association to undefined node");
 	if (currentNode_->AETitle.compare(actualPeerAETitle) == 0) return;
     }
     detachAssociation(false);
@@ -245,9 +245,9 @@ void DicomSender::detachAssociation(bool abortFlag) {
 void DicomSender::storeImage(const string &sopClass, const string &sopInstance, const string &imgFile) {
   typedef scoped_ptr< DcmDataset > DcmDatasetPtr;
 
-  if (sopClass.size() == 0) throw new invalid_argument( string("WARNING: deleted image, giving up (no sopClass):") + imgFile );
+  if (sopClass.size() == 0) throw invalid_argument( string("WARNING: deleted image, giving up (no sopClass):") + imgFile );
   ifstream imgStream( imgFile.c_str(), ios_base::binary );
-  if (imgStream.fail()) throw new runtime_error( string("WARNING: Could not open image, giving up (no imgFile):") + imgFile );
+  if (imgStream.fail()) throw runtime_error( string("WARNING: Could not open image, giving up (no imgFile):") + imgFile );
 
   changeAssociation();
   
@@ -257,7 +257,7 @@ void DicomSender::storeImage(const string &sopClass, const string &sopInstance, 
   do {
     /* which present	ation context should be used */
     T_ASC_PresentationContextID presId = ASC_findAcceptedPresentationContextID(assoc_, sopClass.c_str());
-    if (presId == 0) throw new runtime_error( str(
+    if (presId == 0) throw runtime_error( str(
       format("No presentation context for: (%1%): %2%") % dcmSOPClassUIDToModality(sopClass.c_str()) % sopClass ));
 
     DIC_US msgId = assoc_->nextMsgID++;
@@ -268,7 +268,7 @@ void DicomSender::storeImage(const string &sopClass, const string &sopInstance, 
     DcmFileFormat dcmff;
     OFCondition cond = dcmff.loadFile(imgFile.c_str());
     /* figure out if an error occured while the file was read*/
-    if (cond.bad()) throw new runtime_error( str(
+    if (cond.bad()) throw runtime_error( str(
       format("Bad DICOM file: %1%: %2%") % imgFile % cond.text() ));
 
     // BEGIN: ON_THE_FLY_COMPRESSION

@@ -56,7 +56,7 @@ void readDBMap( DicomConfig::InternalConfigPtr &config, DicomConfig::DBMapType &
 
 
 DicomConfig::DicomConfig( const std::string &configFileName ):config_( new DcmQueryRetrieveConfig ) {
-  if (config_->init( configFileName.c_str() )!=1) throw new runtime_error( 
+  if (config_->init( configFileName.c_str() )!=1) throw runtime_error( 
     str( format("error reading config file:%1%") % configFileName ) );
   readDBMap( config_, dbMap_ );
   maxPDU_ = config_->getMaxPDUSize();

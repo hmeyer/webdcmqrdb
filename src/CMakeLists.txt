@@ -1,6 +1,6 @@
 SET(WT_PROJECT_SOURCE 
-main.cc
-index.cc sender.cc dicomsender.cpp dicomconfig.cpp
+main.cpp
+index.cpp sender.cpp dicomsender.cpp dicomconfig.cpp
 )
 
 SET(WT_PROJECT_TARGET dcmqrdb.wt)

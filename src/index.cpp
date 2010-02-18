@@ -56,19 +56,19 @@ Index::Index( const string &path ) {
             path.c_str(), 
             DcmQRLuceneReader,
             dbcond) );  
-  if (! dbcond.good() ) throw new std::runtime_error( string("error opening index at ") + path);
+  if (! dbcond.good() ) throw std::runtime_error( string("error opening index at ") + path);
 }
 
 template< class DataListType >
 void Index::dicomFind( const string &qrlevel, const string &QRModel, const string &param, const DcmTagKey &paramTag, const TagList &tags, DataListType &result ) {
-  if (param.size() == 0) throw new runtime_error("cannot query index with zero-length query-parameter");
+  if (param.size() == 0) throw runtime_error("cannot query index with zero-length query-parameter");
   
     OFCondition dbcond = EC_Normal;
     DcmQueryRetrieveDatabaseStatus dbStatus(STATUS_Pending);
     DcmDatasetPtr query;
     
     query.reset( new DcmDataset );
-    if (!query) throw new std::runtime_error( string("could not create Query-Object"));
+    if (!query) throw std::runtime_error( string("could not create Query-Object"));
 
     DU_putStringDOElement(query.get(), DCM_QueryRetrieveLevel, qrlevel.c_str());
     DU_putStringDOElement(query.get(), paramTag, param.c_str());
@@ -83,14 +83,14 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
     
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
-    if (dbcond.bad()) throw new std::runtime_error( "cannot query database:" );
+    if (dbcond.bad()) throw std::runtime_error( "cannot query database:" );
 
     dbStatus.deleteStatusDetail();
     while(dbStatus.status() == STATUS_Pending) {
 	DcmDataset *tr;
         dbcond = dbHandle->nextFindResponse(&tr, &dbStatus);
 	reply.reset(tr);
-	if (dbcond.bad()) throw new std::runtime_error( "database error" );
+	if (dbcond.bad()) throw std::runtime_error( "database error" );
         if (dbStatus.status() == STATUS_Pending) {
 	  OFString t;
 	  typename DataListType::DataType item;
@@ -160,7 +160,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   dbcond = dbHandle->startMoveRequest(
       QRModel.c_str(), &query, &dbStatus);      
       
-  if (dbcond.bad()) throw new std::runtime_error( "cannot query database:" );
+  if (dbcond.bad()) throw std::runtime_error( "cannot query database:" );
 
   MoveJob currentJob;
   DIC_US nRemaining = 0;
@@ -169,7 +169,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
 	  currentJob.imgFile, &nRemaining, &dbStatus);
       if (dbStatus.status() == STATUS_Pending) result.push_back( currentJob );
       if (dbcond.bad())
-	  throw new std::runtime_error("database error");
+	  throw std::runtime_error("database error");
   }
 }
 

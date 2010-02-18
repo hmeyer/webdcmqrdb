@@ -9,6 +9,8 @@
 #include <boost/format.hpp>
 #include <boost/filesystem/operations.hpp>
 
+#include <exception>
+
 #include "dicomsender.h"
 
 
@@ -37,7 +39,13 @@ void Sender::workLoop(void) {
 	if (myjobIt->second.status == queued) {
 	  myjobIt->second.status = executing;
 	  lock.unlock();
-	  executeJob( myjobIt->second );
+	  try {
+	    executeJob( myjobIt->second );
+	  } catch (std::exception &e) {
+	    boost::mutex::scoped_lock catch_lock(joblist_mutex_);
+	    myjobIt->second.status = aborted;
+	    myjobIt->second.statusString = e.what();
+	  }
 	  break;
 	}
     }
@@ -144,10 +152,10 @@ void Sender::executeJob( SendJob &job) {
       }
       moveJobIt++;
     }
-  } catch (std::exception *e) {
+  } catch (std::exception &e) {
     boost::mutex::scoped_lock lock(joblist_mutex_);
     job.status = aborted;
-    job.statusString = e->what();
+    job.statusString = e.what();
     return;
   }
   boost::mutex::scoped_lock lock(joblist_mutex_);
