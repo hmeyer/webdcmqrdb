@@ -176,3 +176,15 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   }
 }
 
+Index::IndexPtr IndexDispatcher::getIndexForStorageArea( const StorageAreaType &storage ) {
+  boost::mutex::scoped_lock lock(dispatcher_mutex_);
+  IndexMapType::iterator currentIdx = index_map_.find( storage );
+  if (currentIdx != index_map_.end()) {
+    return currentIdx->second;
+  } else {
+    Index::IndexPtr newIndex( new Index( storage ) );
+    index_map_[ storage ] = newIndex;
+    return newIndex;
+  }
+}
+

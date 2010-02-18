@@ -16,12 +16,15 @@
 
 using namespace std;
 namespace fs = boost::filesystem;
+using boost::format;
+using boost::str;
+using boost::ref;
 
 
 
-void Sender::queueJob( DicomLevel l, const string &uid, const string &desc) {
+void Sender::queueJob( DicomLevel l, const string &uid, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, const Index::IndexPtr index) {
   boost::mutex::scoped_lock lock(joblist_mutex_);
-  jobs_[jobIndex_++] = SendJob(l,uid,desc);
+  jobs_[jobIndex_++] = SendJob(l,uid,desc,myAE,dest,index);
 }
 
 void Sender::workLoop(void) {
@@ -44,8 +47,9 @@ void Sender::workLoop(void) {
 
 
 
-Sender::Sender(Index &index, int numStoreRetries):stopWork_(false), jobIndex_(0),
-  jobTableModel_(jobs_, joblist_mutex_), index_(index), numStoreRetries_(numStoreRetries) {
+Sender::Sender():stopWork_(false), jobIndex_(0),
+  jobTableModel_(jobs_, joblist_mutex_), 
+  numStoreRetries_(5), acse_timeout_(30) {
   boost::thread senderThread( boost::bind(&Sender::workLoop, this) );
 };
 Sender::JobTableModel &Sender::getTableModel(void) {
@@ -62,8 +66,8 @@ int Sender::JobTableModel::rowCount(const WModelIndex &parent) const {
   boost::mutex::scoped_lock lock(joblist_mutex_);  // TODO: shared_lock
   return joblist_.size();
 }
-const vector< string > statusString = assign::list_of("queued")("executing")("successful")("aborted");
-boost::any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
+const vector< string > statusString = boost::assign::list_of("queued")("executing")("successful")("aborted");
+any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
   int c = index.column();
   if (c < 4) {
     boost::mutex::scoped_lock lock(joblist_mutex_); // TODO: shared_lock
@@ -80,8 +84,8 @@ boost::any Sender::JobTableModel::data(const WModelIndex &index, int role) const
   }
   return emptyString;
 }
-const vector< string > JobListHeader = assign::list_of("Description")("status")("Progress")("UID");
-boost::any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
+const vector< string > JobListHeader = boost::assign::list_of("Description")("status")("Progress")("UID");
+any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
   if (orientation == Horizontal) {
     if (section < JobListHeader.size()) return JobListHeader[ section ];
   }
@@ -103,7 +107,7 @@ void Sender::updateJobProgress( SendJob &job, int overallSize, int overallDone, 
 
 void Sender::executeJob( SendJob &job) {
   Index::MoveJobList myJobList;
-  index_.moveRequest( job.level, job.uid, myJobList );
+  job.index->moveRequest( job.level, job.uid, myJobList );
 
   queue<int> fileSizes; int overallSize = 0;
   
@@ -118,7 +122,8 @@ void Sender::executeJob( SendJob &job) {
   }
   moveJobIt = myJobList.begin();
   
-  DicomSender mySender( numStoreRetries_ );
+  DicomSender mySender( job.myAETitle, job.destination, numStoreRetries_, acse_timeout_ );
+  if (maxPDU_>0) mySender.setMaxReceivePDULength( maxPDU_ );
   int counter = 0;
   
   
@@ -149,3 +154,7 @@ void Sender::executeJob( SendJob &job) {
   job.status = successful;
   job.statusString = "Completed";
 }
+
+void Sender::setACSE_Timeout( int timeout ) { acse_timeout_ = timeout;} 
+void Sender::setNumStoreRetries( int retries ) { numStoreRetries_ = retries;}
+void Sender::setMaxPDU( unsigned int mpdu ) { maxPDU_ = mpdu; }

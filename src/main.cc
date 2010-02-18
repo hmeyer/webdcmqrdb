@@ -8,18 +8,21 @@
 #include <Wt/WContainerWidget>
 #include <Wt/WTabWidget>
 #include <Wt/WVBoxLayout>
+#include <Wt/WText>
 
 
 #include <Wt/Ext/LineEdit>
 #include <Wt/Ext/Button>
 #include <Wt/Ext/TableView>
 #include <Wt/Ext/ToolBar>
+#include <Wt/Ext/ComboBox>
 
 #include <boost/lexical_cast.hpp>
 
 
 #include "index.h"
 #include "sender.h"
+#include "dicomconfig.h"
 
 #include <algorithm>
 #include <string>
@@ -39,12 +42,14 @@ void wstring2string( const wstring &w, string &s) {
   s.assign( w.begin(), w.end() );
 }
 
-typedef shared_ptr< Index > IndexPtr;
+typedef shared_ptr< IndexDispatcher > IndexDispatcherPtr;
 typedef shared_ptr< Sender > SenderPtr;
+typedef shared_ptr< DicomConfig > ConfigPtr;
 
 const string emptyString;
-IndexPtr myIndex;
+IndexDispatcherPtr myIndexDispatcher;
 SenderPtr mySender;
+ConfigPtr myConfig;
 
 /*
  * A simple hello world application class which demonstrates how to react
@@ -53,7 +58,7 @@ SenderPtr mySender;
 class DcmQRDBApplication : public WApplication
 {
 public:
-  DcmQRDBApplication(const WEnvironment& env, IndexPtr index, SenderPtr sender );
+  DcmQRDBApplication(const WEnvironment& env, ConfigPtr config, IndexDispatcherPtr indexDispatcher, SenderPtr sender );
 
 protected:
 
@@ -66,13 +71,22 @@ private:
   Ext::TableView *serieTable_;
   Ext::TableView *imageTable_;
   Ext::TableView *jobTable_;
+  Ext::ComboBox *dataBaseBox_;
+  Ext::ComboBox *dicomNodeBox_;
   boost::signals::scoped_connection onUpdateJobConnection_;
-  IndexPtr index_;
+  ConfigPtr config_;
+  IndexDispatcherPtr indexDispatcher_;
+  Index::IndexPtr index_;
   SenderPtr sender_;
   StudyList studies_;
   SerieList series_;
   ImageList images_;
+  string localAETitle_;
+  DicomConfig::PeerInfoPtr selectedDestinationPeer_;
+  DicomConfig::DBInfoPtr selectedDBInfo_;
   void searchIndex( bool background = false );
+  void dataBaseSelectionChanged(void);
+  void dicomNodeSelectionChanged(void);
   void studySelectionChanged(void);
   void serieSelectionChanged(void);
   void imageSelectionChanged(void);
@@ -87,15 +101,15 @@ private:
  * constructor so it is typically also an argument for your custom
  * application constructor.
 */
-DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, SenderPtr sender)
-  : WApplication(env), index_(index), sender_(sender)
+DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, ConfigPtr config, IndexDispatcherPtr indexDispatcher, SenderPtr sender)
+  : WApplication(env), config_(config), indexDispatcher_(indexDispatcher), sender_(sender)
 {
   setTitle("Dicom-Web-DataBase");                               // application title
   
-  WTabWidget *tabs = new WTabWidget();
-  WContainerWidget *searchContainer = new WContainerWidget();
-  WContainerWidget *jobContainer = new WContainerWidget();
-  WContainerWidget *configContainer = new WContainerWidget();
+  WTabWidget *tabs = new WTabWidget;
+  WContainerWidget *searchContainer = new WContainerWidget;
+  WContainerWidget *jobContainer = new WContainerWidget;
+  WContainerWidget *configContainer = new WContainerWidget;
   tabs->addTab( searchContainer, "Search Patients" );
   tabs->addTab( jobContainer, "Jobs" );
   tabs->addTab( configContainer, "Config" );
@@ -107,7 +121,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   tabs->resize( WLength::Auto , WLength(100, WLength::Percentage) );
 //  searchContainer->resize( WLength(100, WLength::FontEm) , WLength(100, WLength::FontEm) );
 
-  searchEdit_ = new Ext::LineEdit();                     // allow text input
+  searchEdit_ = new Ext::LineEdit;                     // allow text input
   searchEdit_->setFocus();                                 // give focus
   
   searchContainer->addWidget( searchEdit_ );
@@ -116,9 +130,9 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   b->setMargin(5, Left);                                 // add 5 pixels margin
   searchContainer->addWidget( b );
 
-  searchContainer->addWidget(new WBreak() );                       // insert a line break
+  searchContainer->addWidget(new WBreak );                       // insert a line break
 
-  studyTable_ = new Ext::TableView();
+  studyTable_ = new Ext::TableView;
   studyTable_->setModel( &studies_ );
   studyTable_->setDataLocation(Ext::ServerSide);
   studyTable_->setSelectionBehavior(SelectRows);
@@ -133,7 +147,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   studyTable_->resize( WLength::Auto, WLength(16, WLength::FontEm) );
   searchContainer->addWidget( studyTable_ );
 
-  serieTable_ = new Ext::TableView();
+  serieTable_ = new Ext::TableView;
   serieTable_->setModel( &series_ );
   serieTable_->setDataLocation(Ext::ServerSide);
   serieTable_->setSelectionBehavior(SelectRows);
@@ -148,7 +162,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   serieTable_->resize( WLength::Auto, WLength(9, WLength::FontEm) );
   searchContainer->addWidget( serieTable_ );
 
-  imageTable_ = new Ext::TableView();
+  imageTable_ = new Ext::TableView;
   imageTable_->setModel( &images_ );
   imageTable_->setDataLocation(Ext::ServerSide);
   imageTable_->setSelectionBehavior(SelectRows);
@@ -178,7 +192,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
     (boost::bind(&DcmQRDBApplication::searchIndex, this, true));
     
     
-  jobTable_ = new Ext::TableView();
+  jobTable_ = new Ext::TableView;
   jobTable_->setModel( &sender_->getTableModel() );
   jobTable_->setDataLocation(Ext::ServerSide);
   jobTable_->setSelectionBehavior(SelectRows);
@@ -187,9 +201,51 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, IndexPtr index, 
   jobTable_->resize( WLength::Auto, WLength(30, WLength::FontEm) );
   jobTable_->setBottomToolBar(jobTable_->createPagingToolBar());
   jobContainer->addWidget( jobTable_ );
-    
+  
+  configContainer->addWidget( new WText("Local DataBase to use:"));
+  dataBaseBox_ = new Ext::ComboBox;
+  dataBaseBox_->setEditable( false );
+  dataBaseBox_->activated().connect( boost::bind(&DcmQRDBApplication::dataBaseSelectionChanged, this) );
+  const DicomConfig::DBMapType &dbMap( config_->getDBMap() );
+  for( DicomConfig::DBMapType::const_iterator i = dbMap.begin(); i != dbMap.end(); i++)
+    dataBaseBox_->addItem( i->first );
+  configContainer->addWidget( dataBaseBox_ );
+  configContainer->addWidget(new WBreak );                       // insert a line break
+  configContainer->addWidget( new WText("Destination Dicom Node:"));
+  dicomNodeBox_ = new Ext::ComboBox;
+  dicomNodeBox_->activated().connect( boost::bind(&DcmQRDBApplication::dicomNodeSelectionChanged, this) );
+  configContainer->addWidget( dicomNodeBox_ );
+  dataBaseBox_->setCurrentIndex(0);dataBaseSelectionChanged();
 }
 
+void DcmQRDBApplication::dataBaseSelectionChanged(void) {
+  studies_.clear();
+  studyTable_->setModel( &studies_ );
+  int idx = dataBaseBox_->currentIndex();
+  int c = 0;
+  const DicomConfig::DBMapType &dbMap( config_->getDBMap() );
+  DicomConfig::DBMapType::const_iterator it = dbMap.begin(); 
+  while( c!=idx && it != dbMap.end() ) {
+    c++;
+    it++;
+  }
+  if (it==dbMap.end()) return;
+  selectedDBInfo_ = it->second;
+  index_ = indexDispatcher_->getIndexForStorageArea( selectedDBInfo_->storageArea );
+  localAETitle_ = it->first;
+  dicomNodeBox_->clear();
+  for(DicomConfig::PeerListType::const_iterator i = selectedDBInfo_->peers.begin(); i != selectedDBInfo_->peers.end(); i++) {
+    const DicomConfig::PeerInfoPtr peer = *i;
+    dicomNodeBox_->addItem( peer->nickName );
+  }
+  dicomNodeBox_->setCurrentIndex(0);
+  dicomNodeSelectionChanged();
+}
+
+void DcmQRDBApplication::dicomNodeSelectionChanged(void) {
+  int idx = dataBaseBox_->currentIndex();
+  selectedDestinationPeer_ = selectedDBInfo_->peers[idx];
+}
 
 
 void DcmQRDBApplication::studySelectionChanged(void) {
@@ -239,7 +295,8 @@ void DcmQRDBApplication::sendStudies(void) {
       str( format("%1% Study[%2%]: %3%") 
 	% stData.getFromTag( DCM_PatientsName ) 
 	% stData.getFromTag( DCM_StudyID )
-	% stData.getFromTag( DCM_StudyDescription )  ));
+	% stData.getFromTag( DCM_StudyDescription )  ),
+      localAETitle_, selectedDestinationPeer_, index_);
   }
 }
 void DcmQRDBApplication::sendSeries(void) {
@@ -251,7 +308,8 @@ void DcmQRDBApplication::sendSeries(void) {
 	% serData.getFromTag( DCM_PatientsName ) 
 	% serData.getFromTag( DCM_StudyID )
 	% serData.getFromTag( DCM_StudyDescription )
-	% serData.getFromTag( DCM_Modality ) % serData.getFromTag( DCM_SeriesNumber ) % serData.getFromTag( DCM_SeriesDescription ))  );
+	% serData.getFromTag( DCM_Modality ) % serData.getFromTag( DCM_SeriesNumber ) % serData.getFromTag( DCM_SeriesDescription )),
+      localAETitle_, selectedDestinationPeer_, index_);
   }
 }
 void DcmQRDBApplication::sendImages(void) {
@@ -264,7 +322,8 @@ void DcmQRDBApplication::sendImages(void) {
 	% imData.getFromTag( DCM_StudyID )
 	% imData.getFromTag( DCM_StudyDescription )
 	% imData.getFromTag( DCM_Modality ) % imData.getFromTag( DCM_SeriesNumber ) % imData.getFromTag( DCM_SeriesDescription )
-	% imData.getFromTag( DCM_InstanceNumber ))  );
+	% imData.getFromTag( DCM_InstanceNumber )),
+      localAETitle_, selectedDestinationPeer_, index_);
   }
 }
 
@@ -282,13 +341,14 @@ void DcmQRDBApplication::searchIndex( bool background )
 
 WApplication *createApplication(const WEnvironment& env)
 {
-  return new DcmQRDBApplication(env, myIndex, mySender);
+  return new DcmQRDBApplication(env, myConfig, myIndexDispatcher, mySender);
 }
 
 int main(int argc, char **argv)
 {
-  myIndex.reset(new Index("/home/hmeyer/tmp/"));
-  mySender.reset(new Sender( *myIndex ));
+  myConfig.reset(new DicomConfig("dcmqrscp.cfg"));
+  myIndexDispatcher.reset(new IndexDispatcher);
+  mySender.reset(new Sender);
   return WRun(argc, argv, &createApplication);
 }
 

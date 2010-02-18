@@ -7,6 +7,7 @@
 #include <Wt/WAbstractTableModel>
 
 #include "index.h"
+#include "dicomconfig.h"
 
 using namespace std;
 using namespace Wt;
@@ -25,7 +26,11 @@ struct SendJob {
   SenderStatus status;
   float percentFinished;
   string statusString;
-  SendJob( DicomLevel l, string id, string desc ):level(l),uid(id),description(desc),status(queued),percentFinished(0) {};
+  string myAETitle;
+  DicomConfig::PeerInfoPtr destination;
+  Index::IndexPtr index;
+  SendJob( DicomLevel l, const string &id, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, Index::IndexPtr idx)
+    :level(l),uid(id),description(desc),status(queued),percentFinished(0), myAETitle(myAE), destination(dest), index(idx) {};
   SendJob():level(ImageLevel), status(aborted), percentFinished(0) {};
 };
 
@@ -45,11 +50,14 @@ class Sender {
       private:
 	JobTableModel();
     };
-    Sender( Index &index, int numStoreRetries = 5 );
-    void queueJob( DicomLevel l, const string &uid, const string &desc);
+    Sender();
+    void queueJob( DicomLevel l, const string &uid, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, const Index::IndexPtr index);
     JobTableModel &getTableModel(void);
     void updateJobStatus( SendJob &job, const string &status );
     void updateJobProgress( SendJob &job, int overallSize,  int overallDone, int currentSize, float currentProgress );
+    void setACSE_Timeout( int timeout );
+    void setNumStoreRetries( int retries );
+    void setMaxPDU( unsigned int mpdu );
   protected:
     void workLoop(void);
     void executeJob( SendJob &job);
@@ -58,8 +66,9 @@ class Sender {
     int jobIndex_;
     JobTableModel jobTableModel_;
     boost::mutex joblist_mutex_;
-    Index &index_;
-    const int numStoreRetries_;
+    int numStoreRetries_;
+    int acse_timeout_;
+    unsigned int maxPDU_;
 };
 
 #endif

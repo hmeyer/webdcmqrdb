@@ -3,6 +3,7 @@
 
 #include <string>
 #include <boost/scoped_ptr.hpp>
+#include <boost/shared_ptr.hpp>
 #include <map>
 #include <vector>
 #include <algorithm>
@@ -16,8 +17,9 @@
 #include <Wt/WAbstractTableModel>
 
 using namespace std;
-using namespace boost;
-using namespace Wt;
+using boost::any;
+using boost::shared_ptr;
+using boost::scoped_ptr;
 
 extern const string emptyString;
 
@@ -28,14 +30,14 @@ enum DicomLevel {
 };
 
 template< class DType >
-class DataList:public WAbstractTableModel, public vector< DType > {
+class DataList:public Wt::WAbstractTableModel, public vector< DType > {
   public:
     typedef DType DataType;
-    int columnCount(const WModelIndex &parent = WModelIndex()) const;
-    int rowCount(const WModelIndex &parent = WModelIndex()) const;
-    boost::any data(const WModelIndex &index, int role = DisplayRole) const;
-    boost::any headerData(int section, Orientation orientation = Horizontal, int role = DisplayRole) const;
-    const std::string &getUID(int index) const;
+    int columnCount(const Wt::WModelIndex &parent = Wt::WModelIndex()) const;
+    int rowCount(const Wt::WModelIndex &parent = Wt::WModelIndex()) const;
+    any data(const Wt::WModelIndex &index, int role = Wt::DisplayRole) const;
+    any headerData(int section, Wt::Orientation orientation = Wt::Horizontal, int role = Wt::DisplayRole) const;
+    const string &getUID(int index) const;
 };
 
 typedef map< DcmTagKey, string > TagMap;
@@ -83,6 +85,7 @@ class Index {
 public:
   typedef std::vector< DcmTagKey > TagList;
   typedef std::vector< MoveJob > MoveJobList;
+  typedef shared_ptr< Index > IndexPtr;
   Index( const string &path );
   void findStudies( const string &filter, StudyList &studies );
   void getSeries( const vector< StudyData* > &studyUIDs, SerieList &series );
@@ -95,31 +98,17 @@ private:
   boost::mutex index_mutex_;
 };
 
-template< class DataType >
-int DataList<DataType>::columnCount(const WModelIndex &parent) const {
-  return DataType::tags.size();
-}
-template< class DataType >
-int DataList<DataType>::rowCount(const WModelIndex &parent) const {
-  return this->size();
-}
-template< class DataType >
-boost::any DataList<DataType>::data(const WModelIndex &index, int role) const {
-  DcmTagKey t = DataType::tags[index.column()];
-  return (*this)[ index.row() ].getFromTag(t);
-}
-template< class DataType >
-const string &DataList<DataType>::getUID(int index) const {
-  if ( index < this->size() ) return (*this)[ index ].getUID();
-  else return emptyString;
-}
-template< class DataType >
-boost::any DataList<DataType>::headerData(int section, Orientation orientation, int role) const {
-  if (orientation == Horizontal && section < DataType::headers.size()) {
-    return DataType::headers[section];
-  }
-  return emptyString;
-}
+
+class IndexDispatcher {
+    typedef string StorageAreaType;
+    typedef map< StorageAreaType, Index::IndexPtr > IndexMapType;
+    IndexMapType index_map_;
+    boost::mutex dispatcher_mutex_;
+  public:
+    Index::IndexPtr getIndexForStorageArea( const StorageAreaType &storage );
+};
+
+#include "index.hpp"
 
 
 #endif
