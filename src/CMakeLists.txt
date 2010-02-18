@@ -12,6 +12,8 @@ LINK_DIRECTORIES( ${WT_HOME}/build/src ${WT_HOME}/build/src/http ${WT_HOME}/buil
   ${DCMTK_HOME}/dcmqrdb/libsrc 
   ${DCMTK_HOME}/ofstd/libsrc 
   ${DCMTK_HOME}/dcmdata/libsrc 
+  ${DCMTK_HOME}/dcmjpeg/libsrc ${DCMTK_HOME}/dcmjpeg/libijg8 ${DCMTK_HOME}/dcmjpeg/libijg12 ${DCMTK_HOME}/dcmjpeg/libijg16
+  ${DCMTK_HOME}/dcmimgle/libsrc
   ${DCMTK_HOME}/dcmnet/libsrc)
 
 ADD_EXECUTABLE(${WT_PROJECT_TARGET} ${WT_PROJECT_SOURCE})
@@ -25,9 +27,20 @@ INCLUDE_DIRECTORIES(${DCMTK_HOME}/config/include)
 INCLUDE_DIRECTORIES(${DCMTK_HOME}/ofstd/include)
 INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmdata/include)
 INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmnet/include)
+INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmimgle/include)
+INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmjpeg/include)
 INCLUDE_DIRECTORIES(${DCMTK_HOME}/dcmqrdb/include)
 
 ADD_DEFINITIONS(-DHAVE_CONFIG_H)
 
 
-TARGET_LINK_LIBRARIES(${WT_PROJECT_TARGET} ${WT_CONNECTOR} wt wtext dcmqrdb dcmnet dcmdata clucene-core ofstd)
+TARGET_LINK_LIBRARIES(${WT_PROJECT_TARGET} ${WT_CONNECTOR} 
+  wt wtext 
+  dcmqrdb 
+  dcmnet 
+  dcmdata 
+  dcmjpeg ijg8 ijg12 ijg16 
+  dcmimgle
+  ofstd
+  jasper
+  clucene-core)

@@ -16,6 +16,12 @@
 #include "dcmtk/dcmdata/dcfilefo.h"
 #include "dcmtk/dcmnet/diutil.h"
 
+#include "dcmtk/dcmjpeg/djdecode.h"  /* for dcmjpeg decoders */
+#include "dcmtk/dcmjpeg/djencode.h"  /* for dcmjpeg encoders */
+#include "dcmtk/dcmdata/dcrledrg.h"  /* for DcmRLEDecoderRegistration */
+#include "dcmtk/dcmdata/dcrleerg.h"  /* for DcmRLEEncoderRegistration */
+
+
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -28,9 +34,41 @@ using boost::scoped_ptr;
 using boost::str;
 using boost::format;
 
+
+class CodecRegister {
+  public:
+    CodecRegister() {
+      cerr << "register codecs" << endl;
+      // register global JPEG decompression codecs
+      DJDecoderRegistration::registerCodecs();
+
+      // register global JPEG compression codecs
+      DJEncoderRegistration::registerCodecs();
+
+      // register RLE compression codec
+      DcmRLEEncoderRegistration::registerCodecs();
+
+      // register RLE decompression codec
+      DcmRLEDecoderRegistration::registerCodecs();
+    }
+    ~CodecRegister() {
+      cerr << "cleanup codecs" << endl;
+      // deregister JPEG codecs
+      DJDecoderRegistration::cleanup();
+      DJEncoderRegistration::cleanup();
+
+      // deregister RLE codecs
+      DcmRLEDecoderRegistration::cleanup();
+      DcmRLEEncoderRegistration::cleanup();      
+    }
+};
+
+CodecRegister myRegister;
+
 DicomSender::DicomSender( const string &localAE, DicomConfig::PeerInfoPtr peer, int numStoreRetries, int acse_timeout ): numStoreRetries_(numStoreRetries), 
   assoc_(NULL), net_(NULL), blockMode_(DIMSE_BLOCKING), dimse_timeout_(0), maxReceivePDULength_(16384),
   networkTransferSyntax_(EXS_Unknown), currentNode_( peer ), currentAETitle_( localAE ) {
+    
   OFCondition cond = ASC_initializeNetwork( NET_REQUESTOR, 0, acse_timeout, &net_ );
   if (cond.bad()) throw runtime_error( str( 
     format("Could not initialize Network:%1%") % cond.text() ) );
