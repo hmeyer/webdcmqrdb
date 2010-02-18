@@ -224,6 +224,7 @@ void DicomSender::changeAssociation() {
     detachAssociation(false);
     attachAssociation();
 }
+
 void DicomSender::detachAssociation(bool abortFlag) {
   if (assoc_ == NULL) return;  /* nothing to do */
 
@@ -260,6 +261,8 @@ void DicomSender::detachAssociation(bool abortFlag) {
 
 void DicomSender::storeImage(const string &sopClass, const string &sopInstance, const string &imgFile) {
   typedef scoped_ptr< DcmDataset > DcmDatasetPtr;
+
+  updateStatus_( str( format( "starting transfer of %1%" ) % sopInstance ) );
 
   if (sopClass.size() == 0) throw invalid_argument( string("WARNING: deleted image, giving up (no sopClass):") + imgFile );
   ifstream imgStream( imgFile.c_str(), ios_base::binary );

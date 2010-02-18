@@ -30,6 +30,7 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/bind.hpp>
 #include <boost/format.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <cstdlib>
 
@@ -84,6 +85,7 @@ private:
   SerieList series_;
   ImageList images_;
   string localAETitle_;
+  WText *searchStatus_;
   DicomConfig::PeerInfoPtr selectedDestinationPeer_;
   DicomConfig::DBInfoPtr selectedDBInfo_;
   void searchIndex( bool background = false );
@@ -146,6 +148,9 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, ConfigPtr config
   sendStudiesButton_->disable();
   sendStudiesButton_->clicked().connect( boost::bind(&DcmQRDBApplication::sendStudies, this) );
   studyTable_->bottomToolBar()->add( sendStudiesButton_ );
+  searchStatus_ = new WText;
+  studyTable_->bottomToolBar()->addStretch();
+  studyTable_->bottomToolBar()->add( searchStatus_ );
   studyTable_->resize( WLength::Auto, WLength(16, WLength::FontEm) );
   searchContainer->addWidget( studyTable_ );
 
@@ -233,7 +238,11 @@ void DcmQRDBApplication::dataBaseSelectionChanged(void) {
   }
   if (it==dbMap.end()) return;
   selectedDBInfo_ = it->second;
-  index_ = indexDispatcher_->getIndexForStorageArea( selectedDBInfo_->storageArea );
+  try {
+    index_ = indexDispatcher_->getIndexForStorageArea( selectedDBInfo_->storageArea );
+  } catch (std::exception &e) {
+    searchStatus_->setText( e.what() );
+  }
   localAETitle_ = it->first;
   dicomNodeBox_->clear();
   for(DicomConfig::PeerListType::const_iterator i = selectedDBInfo_->peers.begin(); i != selectedDBInfo_->peers.end(); i++) {
@@ -257,7 +266,11 @@ void DcmQRDBApplication::studySelectionChanged(void) {
     vector< StudyData* > stlist;
     for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++)
       stlist.push_back( &studies_[*i] );
-    index_->getSeries( stlist, series_ );
+    try {
+      index_->getSeries( stlist, series_ );
+    } catch (std::exception &e) {
+      searchStatus_->setText( e.what() );
+    }
     serieTable_->setModel( &series_ );
   }
   else {
@@ -276,7 +289,11 @@ void DcmQRDBApplication::serieSelectionChanged(void) {
       uid = series_.getUID( *i );
       selist.push_back( &series_[*i] );
     }
-    index_->getImages( selist, images_ );
+    try {
+      index_->getImages( selist, images_ );
+    } catch (std::exception &e) {
+      searchStatus_->setText( e.what() );
+    }
     imageTable_->setModel( &images_ );
   }
   else {
@@ -334,8 +351,20 @@ void DcmQRDBApplication::searchIndex( bool background )
   wstring wsearchString = searchEdit_->text().value();
   string searchString;
   wstring2string( wsearchString, searchString );
-  if (!background || searchString!="*") {
-    index_->findStudies(searchString, studies_);
+  trim(searchString);
+  if (searchString[0]=='*' && background) {
+    searchStatus_->setText( "leading Wildcard-Searches are -- S L O W -- press the Search Button to go for it" );
+  } else {
+    bool success = true;
+    try {
+      index_->findStudies(searchString, studies_);
+    } catch (std::exception &e) {
+      searchStatus_->setText( e.what() );
+      success = false;
+    }
+    if (success) {
+      searchStatus_->setText( str( format( "found %1% studies" ) % studies_.size()));
+    }
     studyTable_->setModel( &studies_ );
   }
 }
