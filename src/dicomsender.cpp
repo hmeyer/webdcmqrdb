@@ -35,7 +35,12 @@ using boost::str;
 using boost::format;
 
 
-class CodecRegister;
+class CodecRegister {
+  public:
+    CodecRegister();
+    ~CodecRegister();
+};
+
 CodecRegister myRegister;
 
 DicomSender::DicomSender( const string &localAE, DicomConfig::PeerInfoPtr peer, int numStoreRetries, int acse_timeout ): numStoreRetries_(numStoreRetries), 
@@ -316,29 +321,26 @@ void DicomSender::storeImage(const string &sopClass, const string &sopInstance, 
   return;
 }
 
-class CodecRegister {
-  public:
-    CodecRegister() {
-      // register global JPEG decompression codecs
-      DJDecoderRegistration::registerCodecs();
+CodecRegister::CodecRegister() {
+  // register global JPEG decompression codecs
+  DJDecoderRegistration::registerCodecs();
 
-      // register global JPEG compression codecs
-      DJEncoderRegistration::registerCodecs();
+  // register global JPEG compression codecs
+  DJEncoderRegistration::registerCodecs();
 
-      // register RLE compression codec
-      DcmRLEEncoderRegistration::registerCodecs();
+  // register RLE compression codec
+  DcmRLEEncoderRegistration::registerCodecs();
 
-      // register RLE decompression codec
-      DcmRLEDecoderRegistration::registerCodecs();
-    }
-    ~CodecRegister() {
-      // deregister JPEG codecs
-      DJDecoderRegistration::cleanup();
-      DJEncoderRegistration::cleanup();
+  // register RLE decompression codec
+  DcmRLEDecoderRegistration::registerCodecs();
+}
+CodecRegister::~CodecRegister() {
+  // deregister JPEG codecs
+  DJDecoderRegistration::cleanup();
+  DJEncoderRegistration::cleanup();
 
-      // deregister RLE codecs
-      DcmRLEDecoderRegistration::cleanup();
-      DcmRLEEncoderRegistration::cleanup();      
-    }
-};
+  // deregister RLE codecs
+  DcmRLEDecoderRegistration::cleanup();
+  DcmRLEEncoderRegistration::cleanup();      
+}
 
