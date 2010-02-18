@@ -31,6 +31,8 @@
 #include <boost/bind.hpp>
 #include <boost/format.hpp>
 
+#include <cstdlib>
+
 #include "dcmtk/dcmdata/dcdeftag.h"
 
 
@@ -243,7 +245,7 @@ void DcmQRDBApplication::dataBaseSelectionChanged(void) {
 }
 
 void DcmQRDBApplication::dicomNodeSelectionChanged(void) {
-  int idx = dataBaseBox_->currentIndex();
+  int idx = dicomNodeBox_->currentIndex();
   selectedDestinationPeer_ = selectedDBInfo_->peers[idx];
 }
 
@@ -346,7 +348,13 @@ WApplication *createApplication(const WEnvironment& env)
 
 int main(int argc, char **argv)
 {
-  myConfig.reset(new DicomConfig("dcmqrscp.cfg"));
+  const char dcmqrscpConfigPathEnv[] = "DCMQRSCP_CONFIG";
+  char *dcmqrscpConfigPath = getenv("DCMQRSCP_CONFIG");
+  if (dcmqrscpConfigPath == NULL) {
+    cerr << "Warning: did not find Environment-Variable " << dcmqrscpConfigPathEnv << " specifying the path of dcmqrscp.cfg" << endl;
+    exit(1);
+  }
+  myConfig.reset(new DicomConfig(dcmqrscpConfigPath));
   myIndexDispatcher.reset(new IndexDispatcher);
   mySender.reset(new Sender);
   return WRun(argc, argv, &createApplication);

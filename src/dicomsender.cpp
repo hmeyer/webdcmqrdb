@@ -243,7 +243,6 @@ void DicomSender::detachAssociation(bool abortFlag) {
 
 
 void DicomSender::storeImage(const string &sopClass, const string &sopInstance, const string &imgFile) {
-  cerr << __FUNCTION__ << ": sending:" << imgFile << endl;
   typedef scoped_ptr< DcmDataset > DcmDatasetPtr;
 
   if (sopClass.size() == 0) throw new invalid_argument( string("WARNING: deleted image, giving up (no sopClass):") + imgFile );

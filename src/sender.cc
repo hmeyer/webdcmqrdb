@@ -76,15 +76,16 @@ any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
       const SendJob &j = jobIt->second;
       switch (c) {
 	case 0: return j.description;
-	case 1: return statusString[j.status] + " " + j.statusString;
-	case 2: return str( format("%2.1f %%") % j.percentFinished );
-	case 3: return j.uid;
+	case 1: return j.destination->nickName;
+	case 2: return statusString[j.status] + " " + j.statusString;
+	case 3: return str( format("%2.1f %%") % j.percentFinished );
+	case 4: return j.uid;
       }
     }
   }
   return emptyString;
 }
-const vector< string > JobListHeader = boost::assign::list_of("Description")("status")("Progress")("UID");
+const vector< string > JobListHeader = boost::assign::list_of("Description")("Destination")("status")("Progress")("UID");
 any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
   if (orientation == Horizontal) {
     if (section < JobListHeader.size()) return JobListHeader[ section ];

@@ -61,9 +61,6 @@ Index::Index( const string &path ) {
 
 template< class DataListType >
 void Index::dicomFind( const string &qrlevel, const string &QRModel, const string &param, const DcmTagKey &paramTag, const TagList &tags, DataListType &result ) {
-//#ifdef DEBUG
-cerr << __FUNCTION__ << " qrlevel:" << qrlevel << " QRModel:" << QRModel << " param:" << param << " paramTag:" << paramTag.toString().c_str() << endl;
-//#endif
   if (param.size() == 0) throw new runtime_error("cannot query index with zero-length query-parameter");
   
     OFCondition dbcond = EC_Normal;
