@@ -274,7 +274,6 @@ void DcmQRDBApplication::serieSelectionChanged(void) {
     for(vector< int >::const_iterator i = rows.begin(); i != rows.end(); i++) {
       string uid;
       uid = series_.getUID( *i );
-      cerr << "in " << __FUNCTION__ << " retrieved uid:" << uid << endl;
       selist.push_back( &series_[*i] );
     }
     index_->getImages( selist, images_ );
