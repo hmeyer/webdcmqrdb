@@ -142,7 +142,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, ConfigPtr config
   studyTable_->setSelectionBehavior(SelectRows);
   studyTable_->setSelectionMode(ExtendedSelection);
   studyTable_->itemSelectionChanged().connect( boost::bind(&DcmQRDBApplication::studySelectionChanged, this) );
-  studyTable_->setPageSize(10);
+  studyTable_->setPageSize(50);
   studyTable_->setBottomToolBar(studyTable_->createPagingToolBar());
   sendStudiesButton_ = new Ext::Button("Send");
   sendStudiesButton_->disable();
@@ -160,7 +160,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, ConfigPtr config
   serieTable_->setSelectionBehavior(SelectRows);
   serieTable_->setSelectionMode(ExtendedSelection);
   serieTable_->itemSelectionChanged().connect( boost::bind(&DcmQRDBApplication::serieSelectionChanged, this) );
-  serieTable_->setPageSize(5);
+  serieTable_->setPageSize(50);
   serieTable_->setBottomToolBar(serieTable_->createPagingToolBar());
   sendSeriesButton_ = new Ext::Button("Send");
   sendSeriesButton_->disable();
@@ -175,7 +175,7 @@ DcmQRDBApplication::DcmQRDBApplication(const WEnvironment& env, ConfigPtr config
   imageTable_->setSelectionBehavior(SelectRows);
   imageTable_->setSelectionMode(ExtendedSelection);
   imageTable_->itemSelectionChanged().connect( boost::bind(&DcmQRDBApplication::imageSelectionChanged, this) );
-  imageTable_->setPageSize(5);
+  imageTable_->setPageSize(50);
   imageTable_->setBottomToolBar(imageTable_->createPagingToolBar());
   sendImagesButton_ = new Ext::Button("Send");
   sendImagesButton_->disable();
@@ -352,9 +352,18 @@ void DcmQRDBApplication::searchIndex( bool background )
   string searchString;
   wstring2string( wsearchString, searchString );
   trim(searchString);
-  if (searchString[0]=='*' && background) {
+  int numCharacters = false;
+  const int MinCharactersToWildcard = 3;
+  for(string::const_iterator i = searchString.begin(); i != searchString.end(); i++) if (*i != '*' && *i != '?') numCharacters++;
+  if (numCharacters >= MinCharactersToWildcard) {
+    if (searchString[0] != '*') searchString = "*" + searchString;
+    if (searchString[searchString.length()-1] != '*') searchString += "*";
+  }
+  if (background && numCharacters < MinCharactersToWildcard && searchString[0]=='*') {
     searchStatus_->setText( "leading Wildcard-Searches are -- S L O W -- press the Search Button to go for it" );
-  } else {
+    return;
+  }
+  else {
     bool success = true;
     try {
       index_->findStudies(searchString, studies_);
