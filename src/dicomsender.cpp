@@ -100,12 +100,7 @@ void DicomSender::storeProgressCallback(void *self,
       scalar_progress = 1.0;
       break;
     default:
-	float totalBytes;
-        if (progress->totalBytes == 0)
-          totalBytes = selfObj->currentfileSize_;
-        else
-	  totalBytes = progress->totalBytes;
-	scalar_progress = progress->progressBytes / totalBytes;
+	scalar_progress = progress->progressBytes / selfObj->currentfileSize_;
         break;
     }
     selfObj->updateProgress_( scalar_progress );
