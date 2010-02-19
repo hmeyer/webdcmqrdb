@@ -16,6 +16,8 @@
 #include "dcmtk/dcmdata/dcfilefo.h"
 #include "dcmtk/dcmnet/diutil.h"
 
+
+
 #include "dcmtk/dcmjpeg/djdecode.h"  /* for dcmjpeg decoders */
 #include "dcmtk/dcmjpeg/djencode.h"  /* for dcmjpeg encoders */
 #include "dcmtk/dcmdata/dcrledrg.h"  /* for DcmRLEDecoderRegistration */
@@ -28,6 +30,7 @@
 #include "dicomsender.h"
 #include <boost/format.hpp>
 #include <boost/scoped_ptr.hpp>
+#include <boost/thread/mutex.hpp>
 
 using namespace std;
 using boost::scoped_ptr;
@@ -38,15 +41,20 @@ using boost::format;
 class CodecRegister {
   public:
     CodecRegister();
+    void regsiterCodecs();
     ~CodecRegister();
+  protected:
+    static boost::mutex codec_mutex_;
+    bool codecs_registered;
 };
 
+boost::mutex CodecRegister::codec_mutex_;
 CodecRegister myRegister;
 
 DicomSender::DicomSender( const string &localAE, DicomConfig::PeerInfoPtr peer, int numStoreRetries, int acse_timeout ): numStoreRetries_(numStoreRetries), 
   assoc_(NULL), net_(NULL), blockMode_(DIMSE_BLOCKING), dimse_timeout_(0), maxReceivePDULength_(16384),
   networkTransferSyntax_(EXS_Unknown), currentNode_( peer ), currentAETitle_( localAE ) {
-    
+  myRegister.regsiterCodecs();
   OFCondition cond = ASC_initializeNetwork( NET_REQUESTOR, 0, acse_timeout, &net_ );
   if (cond.bad()) throw runtime_error( str( 
     format("Could not initialize Network:%1%") % cond.text() ) );
@@ -324,26 +332,35 @@ void DicomSender::storeImage(const string &sopClass, const string &sopInstance, 
   return;
 }
 
-CodecRegister::CodecRegister() {
-  // register global JPEG decompression codecs
-  DJDecoderRegistration::registerCodecs();
 
-  // register global JPEG compression codecs
-  DJEncoderRegistration::registerCodecs();
+CodecRegister::CodecRegister():codecs_registered(false) {
+}
+void CodecRegister::regsiterCodecs() {
+  boost::mutex::scoped_lock lock(codec_mutex_);
+  if (!codecs_registered) {
+    // register global JPEG decompression codecs
+    DJDecoderRegistration::registerCodecs();
 
-  // register RLE compression codec
-  DcmRLEEncoderRegistration::registerCodecs();
+    // register global JPEG compression codecs
+    DJEncoderRegistration::registerCodecs();
 
-  // register RLE decompression codec
-  DcmRLEDecoderRegistration::registerCodecs();
+    // register RLE compression codec
+    DcmRLEEncoderRegistration::registerCodecs();
+
+    // register RLE decompression codec
+    DcmRLEDecoderRegistration::registerCodecs();
+    codecs_registered = true;
+  }
 }
 CodecRegister::~CodecRegister() {
-  // deregister JPEG codecs
-  DJDecoderRegistration::cleanup();
-  DJEncoderRegistration::cleanup();
+  if (codecs_registered) {
+    // deregister JPEG codecs
+    DJDecoderRegistration::cleanup();
+    DJEncoderRegistration::cleanup();
 
-  // deregister RLE codecs
-  DcmRLEDecoderRegistration::cleanup();
-  DcmRLEEncoderRegistration::cleanup();      
+    // deregister RLE codecs
+    DcmRLEDecoderRegistration::cleanup();
+    DcmRLEEncoderRegistration::cleanup();      
+ }
 }
 
