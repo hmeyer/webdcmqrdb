@@ -84,7 +84,7 @@ int Sender::JobTableModel::rowCount(const WModelIndex &parent) const {
   if (!jobListLock) { return 0; }//throw runtime_error("workLoop: Could not acquire shared joblist-Lock!");
   return joblist_.size();
 }
-const vector< string > JobListHeader = boost::assign::list_of("Description")("Destination")("status")("Progress")("UID");
+const vector< string > JobListHeader = boost::assign::list_of("#")("Description")("Destination")("status")("Progress")("UID");
 any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
   if (orientation == Horizontal) {
     if (section < JobListHeader.size()) return JobListHeader[ section ];
@@ -103,7 +103,7 @@ any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
     if (jobIt != joblist_.end()) {
       const SendJob &j = jobIt->second;
       shared_lock jobLock(*j.job_mutex_, get_system_time() + millisec(20));
-      if (!jobListLock) return string("Could acquire shared job-Lock!");
+      if (!jobLock) return string("Could acquire shared job-Lock!");
       switch (c) {
 	case 0: return jobIt->first;
 	case 1: return j.description;
