@@ -84,32 +84,35 @@ int Sender::JobTableModel::rowCount(const WModelIndex &parent) const {
   if (!jobListLock) { return 0; }//throw runtime_error("workLoop: Could not acquire shared joblist-Lock!");
   return joblist_.size();
 }
+const vector< string > JobListHeader = boost::assign::list_of("Description")("Destination")("status")("Progress")("UID");
+any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
+  if (orientation == Horizontal) {
+    if (section < JobListHeader.size()) return JobListHeader[ section ];
+  }
+  return emptyString;
+}
 const vector< string > statusString = boost::assign::list_of("queued")("executing")("successful")("aborted");
 any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
   int c = index.column();
-  if (c < 4) {
+  if (c < JobListHeader.size()) {
     shared_lock jobListLock(joblist_mutex_, get_system_time() + millisec(20));
     if (!jobListLock) return string("Could acquire shared jobList-Lock!");
-    JobListType::const_iterator jobIt = joblist_.find( index.row() );
+    JobListType::const_iterator jobIt = joblist_.begin();
+    int row = index.row();
+    while(row && jobIt!=joblist_.end()) { row--; jobIt++; }
     if (jobIt != joblist_.end()) {
       const SendJob &j = jobIt->second;
       shared_lock jobLock(*j.job_mutex_, get_system_time() + millisec(20));
       if (!jobListLock) return string("Could acquire shared job-Lock!");
       switch (c) {
-	case 0: return j.description;
-	case 1: return j.destination->nickName;
-	case 2: return statusString[j.status] + " " + j.statusString;
-	case 3: return str( format("%2.1f %%") % j.percentFinished );
-	case 4: return j.uid;
+	case 0: return jobIt->first;
+	case 1: return j.description;
+	case 2: return j.destination->nickName;
+	case 3: return statusString[j.status] + " " + j.statusString;
+	case 4: return str( format("%2.1f %%") % j.percentFinished );
+	case 5: return j.uid;
       }
     }
-  }
-  return emptyString;
-}
-const vector< string > JobListHeader = boost::assign::list_of("Description")("Destination")("status")("Progress")("UID");
-any Sender::JobTableModel::headerData(int section, Orientation orientation, int role) const {
-  if (orientation == Horizontal) {
-    if (section < JobListHeader.size()) return JobListHeader[ section ];
   }
   return emptyString;
 }
