@@ -398,6 +398,9 @@ int main(int argc, char **argv)
     return WRun(argc, argv, &createApplication);
   } catch (std::exception &e) {
     cerr << "Unhandled Exception: " << e.what() << endl << "crap - exiting" << endl;
+  } catch (...) {
+    cerr << "Unhandled unknown Exception!" << endl << "crap - exiting" << endl;
   }
+  
 }
 

@@ -332,8 +332,10 @@ if (currentfileSize_ != filesize) cerr << "Warning: currentfileSize_ != filesize
 CodecRegister::CodecRegister():codecs_registered(false) {
 }
 void CodecRegister::regsiterCodecs() {
-  boost::mutex::scoped_lock lock(codec_mutex_);
+  boost::unique_lock<boost::mutex> lock(codec_mutex_);
   if (!codecs_registered) {
+    codecs_registered = true;
+    lock.unlock();
     // register global JPEG decompression codecs
     DJDecoderRegistration::registerCodecs();
 
@@ -349,7 +351,10 @@ void CodecRegister::regsiterCodecs() {
   }
 }
 CodecRegister::~CodecRegister() {
+  boost::unique_lock<boost::mutex> lock(codec_mutex_);
   if (codecs_registered) {
+    codecs_registered = false;
+    lock.unlock();
     // deregister JPEG codecs
     DJDecoderRegistration::cleanup();
     DJEncoderRegistration::cleanup();

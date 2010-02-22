@@ -25,29 +25,32 @@ using boost::ref;
 
 
 void Sender::queueJob( DicomLevel l, const string &uid, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, const Index::IndexPtr index) {
-  boost::mutex::scoped_lock lock(joblist_mutex_);
+  unique_lock lock(joblist_mutex_);
   jobs_[jobIndex_++] = SendJob(l,uid,desc,myAE,dest,index);
 }
 
 void Sender::workLoop(void) {
-  int c = 0;
   while( !stopWork_ ) {
     {
-      boost::mutex::scoped_lock lock(joblist_mutex_);
-      JobListType::iterator myjobIt;
-      for(JobListType::iterator myjobIt = jobs_.begin(); myjobIt != jobs_.end(); myjobIt++)
-	if (myjobIt->second.status == queued) {
-	  myjobIt->second.status = executing;
-	  lock.unlock();
+      shared_lock jobListLock(joblist_mutex_);
+      JobListType::iterator myjobIt =  jobs_.begin();
+      bool jobDone = false;
+      while( !jobDone && myjobIt != jobs_.end()) {
+	SendJob &job = myjobIt->second;
+	unique_lock jobLock(*job.job_mutex_);
+	if (job.status == queued) {
+	  job.status = executing;
+	  jobListLock.unlock();
 	  try {
-	    executeJob( myjobIt->second );
+	    executeJob( job );
 	  } catch (std::exception &e) {
-	    boost::mutex::scoped_lock catch_lock(joblist_mutex_);
 	    myjobIt->second.status = aborted;
 	    myjobIt->second.statusString = e.what();
 	  }
-	  break;
+	  jobDone = true;
 	}
+	myjobIt++;
+      }
     }
     boost::this_thread::sleep(boost::posix_time::milliseconds(100)); 
   }
@@ -65,23 +68,24 @@ Sender::JobTableModel &Sender::getTableModel(void) {
 }
 
 
-Sender::JobTableModel::JobTableModel( const JobListType &joblist, boost::mutex &joblist_mutex )
+Sender::JobTableModel::JobTableModel( const JobListType &joblist, boost::shared_mutex &joblist_mutex )
   :joblist_(joblist), joblist_mutex_(joblist_mutex) { }
 int Sender::JobTableModel::columnCount(const WModelIndex &parent) const {
   return 4;
 }
 int Sender::JobTableModel::rowCount(const WModelIndex &parent) const {
-  boost::mutex::scoped_lock lock(joblist_mutex_);  // TODO: shared_lock
+  shared_lock jobListLock(joblist_mutex_);
   return joblist_.size();
 }
 const vector< string > statusString = boost::assign::list_of("queued")("executing")("successful")("aborted");
 any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
   int c = index.column();
   if (c < 4) {
-    boost::mutex::scoped_lock lock(joblist_mutex_); // TODO: shared_lock
+    shared_lock jobListLock(joblist_mutex_);
     JobListType::const_iterator jobIt = joblist_.find( index.row() );
     if (jobIt != joblist_.end()) {
       const SendJob &j = jobIt->second;
+      shared_lock jobLock(*j.job_mutex_);
       switch (c) {
 	case 0: return j.description;
 	case 1: return j.destination->nickName;
@@ -101,15 +105,19 @@ any Sender::JobTableModel::headerData(int section, Orientation orientation, int 
   return emptyString;
 }
 
-void Sender::updateJobStatus( SendJob &job, const string &status ) {
-  boost::mutex::scoped_lock lock(joblist_mutex_);
+void Sender::updateJobStatus( SendJob &job, SenderStatus status ) {
+  unique_lock lock(joblist_mutex_);
+  job.status = status;
+}
+void Sender::updateJobStatusString( SendJob &job, const string &status ) {
+  unique_lock lock(joblist_mutex_);
   job.statusString = status;
 }
 void Sender::updateJobProgress( SendJob &job, uintmax_t overallSize, uintmax_t overallDone, uintmax_t currentSize, float currentProgress ) {
   float progress;
   if (overallSize != 0) progress = 100.0 * (overallDone + currentSize * currentProgress)  / overallSize;
   else progress = 100.0;
-  boost::mutex::scoped_lock lock(joblist_mutex_);
+  unique_lock lock(joblist_mutex_);
   job.percentFinished = progress;
 }
 
@@ -118,7 +126,9 @@ void Sender::executeJob( SendJob &job) {
   Index::MoveJobList myJobList;
   job.index->moveRequest( job.level, job.uid, myJobList );
 
-  queue<uintmax_t> fileSizes; uintmax_t overallSize = 0;
+  queue<uintmax_t> fileSizes; 
+  uintmax_t overallSize = 0;
+  uintmax_t transferredSize = 0;
   
   Index::MoveJobList::iterator moveJobIt;
   for(moveJobIt = myJobList.begin(); moveJobIt != myJobList.end(); moveJobIt++) {
@@ -137,9 +147,9 @@ void Sender::executeJob( SendJob &job) {
   
   
   try {
-    uintmax_t currentFileSize; uintmax_t transferredSize = 0;
+    uintmax_t currentFileSize; 
     boost::signals::scoped_connection statusConnection = mySender.onStatusUpdate( 
-      bind(&Sender::updateJobStatus, this, job, _1) );
+      bind(&Sender::updateJobStatusString, this, job, _1) );
     boost::signals::scoped_connection progressConnection = mySender.onProgressUpdate( 
       bind(&Sender::updateJobProgress, this, job, ref(overallSize), ref(transferredSize), ref(currentFileSize), _1) );
     while (moveJobIt != myJobList.end()) {
@@ -150,15 +160,13 @@ void Sender::executeJob( SendJob &job) {
       moveJobIt++;
     }
   } catch (std::exception &e) {
-    boost::mutex::scoped_lock lock(joblist_mutex_);
-    job.status = aborted;
-    job.statusString = e.what();
+    updateJobStatus(job, aborted);
+    updateJobStatusString(job, e.what());
     return;
   }
-  boost::mutex::scoped_lock lock(joblist_mutex_);
-  job.percentFinished = 100.0;
-  job.status = successful;
-  job.statusString = "Completed";
+  updateJobProgress(job, overallSize, transferredSize, 0, 0);
+  updateJobStatusString(job, "Completed");
+  updateJobStatus(job, successful);
 }
 
 void Sender::setACSE_Timeout( int timeout ) { acse_timeout_ = timeout;} 

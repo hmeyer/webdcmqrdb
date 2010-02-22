@@ -79,7 +79,7 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
    
     DcmDatasetPtr reply;
     
-    boost::mutex::scoped_lock lock(index_mutex_);  // TODO: index pool
+    boost::unique_lock<boost::mutex> lock(index_mutex_);  // TODO: index pool
     
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
@@ -155,7 +155,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   DU_putStringDOElement(&query, uidTag, uid.c_str());
   OFCondition dbcond = EC_Normal;
 
-  boost::mutex::scoped_lock lock(index_mutex_);  // TODO: index pool
+  boost::unique_lock<boost::mutex> lock(index_mutex_);  // TODO: index pool
   
   dbcond = dbHandle->startMoveRequest(
       QRModel.c_str(), &query, &dbStatus);      
@@ -174,7 +174,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
 }
 
 Index::IndexPtr IndexDispatcher::getIndexForStorageArea( const StorageAreaType &storage ) {
-  boost::mutex::scoped_lock lock(dispatcher_mutex_);
+  boost::unique_lock<boost::mutex> lock(dispatcher_mutex_);
   IndexMapType::iterator currentIdx = index_map_.find( storage );
   if (currentIdx != index_map_.end()) {
     return currentIdx->second;
