@@ -3,12 +3,12 @@
 
 #include <string>
 #include <map>
-#include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <Wt/WAbstractTableModel>
 
 #include "index.h"
 #include "dicomconfig.h"
+#include "locks.h"
 
 using namespace std;
 using namespace Wt;
@@ -40,8 +40,6 @@ struct SendJob {
 class Sender {
   public:
     typedef map<int, SendJob > JobListType;
-    typedef boost::unique_lock<boost::shared_mutex> unique_lock;
-    typedef boost::shared_lock<boost::shared_mutex> shared_lock;
     
     class JobTableModel: public WAbstractTableModel {
       public:
@@ -72,7 +70,7 @@ class Sender {
     JobListType jobs_;
     int jobIndex_;
     JobTableModel jobTableModel_;
-    boost::shared_mutex joblist_mutex_;
+    shared_mutex joblist_mutex_;
     int numStoreRetries_;
     int acse_timeout_;
     unsigned int maxPDU_;

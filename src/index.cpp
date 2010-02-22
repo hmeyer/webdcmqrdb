@@ -24,27 +24,27 @@
 
 
 using namespace std;
-using namespace boost;
+using boost::assign::list_of;
 
 typedef scoped_ptr< DcmDataset > DcmDatasetPtr;
 
-const TagList StudyData::tags = assign::list_of(DCM_PatientsName)(DCM_PatientsBirthDate)(DCM_PatientID)
+const TagList StudyData::tags = list_of(DCM_PatientsName)(DCM_PatientsBirthDate)(DCM_PatientID)
   (DCM_StudyID)(DCM_StudyDate)(DCM_StudyDescription)(DCM_ReferringPhysiciansName)(DCM_InstitutionName)
   (DCM_InstitutionalDepartmentName)(DCM_StudyInstanceUID);
 
-const TagList SerieData::tags = assign::list_of(DCM_SeriesNumber)(DCM_Modality)(DCM_SeriesDescription)
+const TagList SerieData::tags = list_of(DCM_SeriesNumber)(DCM_Modality)(DCM_SeriesDescription)
   (DCM_SeriesInstanceUID);
 
-const TagList ImageData::tags = assign::list_of(DCM_InstanceNumber)(DCM_TransferSyntaxUID)(DCM_SOPInstanceUID);
+const TagList ImageData::tags = list_of(DCM_InstanceNumber)(DCM_TransferSyntaxUID)(DCM_SOPInstanceUID);
   
   
-const StringList StudyData::headers = assign::list_of("Name")("Date of Birth")("PatientID")
+const StringList StudyData::headers = list_of("Name")("Date of Birth")("PatientID")
   ("StudyID")("Date of Study")("Description")("Referring Physician")("Institution")
   ("Department")("UID");
 
-const StringList SerieData::headers = assign::list_of("Number")("Modality")("Description")("UID");
+const StringList SerieData::headers = list_of("Number")("Modality")("Description")("UID");
 
-const StringList ImageData::headers = assign::list_of("Number")("TransferSyntax")("UID");
+const StringList ImageData::headers = list_of("Number")("TransferSyntax")("UID");
 
 const string &StudyData::getUID() const { return getFromTag(DCM_StudyInstanceUID); }
 const string &SerieData::getUID() const { return getFromTag(DCM_SeriesInstanceUID); }
@@ -79,7 +79,8 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
    
     DcmDatasetPtr reply;
     
-    boost::unique_lock<boost::mutex> lock(index_mutex_);  // TODO: index pool
+    unique_lock indexLock(index_mutex_, millisec(2000));  // TODO: index pool
+    if (!indexLock) throw runtime_error("dicomFind: Could not acquire unique index-lock!");
     
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
@@ -155,7 +156,8 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   DU_putStringDOElement(&query, uidTag, uid.c_str());
   OFCondition dbcond = EC_Normal;
 
-  boost::unique_lock<boost::mutex> lock(index_mutex_);  // TODO: index pool
+  unique_lock indexLock(index_mutex_, millisec(2000));  // TODO: index pool
+  if (!indexLock) throw runtime_error("moveRequest: Could not acquire unique index-lock!");
   
   dbcond = dbHandle->startMoveRequest(
       QRModel.c_str(), &query, &dbStatus);      
@@ -174,7 +176,9 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
 }
 
 Index::IndexPtr IndexDispatcher::getIndexForStorageArea( const StorageAreaType &storage ) {
-  boost::unique_lock<boost::mutex> lock(dispatcher_mutex_);
+  unique_lock dispatcherLock(dispatcher_mutex_, millisec(300)); 
+  if (!dispatcherLock) throw runtime_error("getIndexForStorageArea: Could not acquire unique dispatcher-lock!");
+  
   IndexMapType::iterator currentIdx = index_map_.find( storage );
   if (currentIdx != index_map_.end()) {
     return currentIdx->second;

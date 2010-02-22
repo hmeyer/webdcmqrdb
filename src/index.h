@@ -16,6 +16,10 @@
 #include "dcmtk/dcmqrdb/dcmqrdbl.h"
 #include <Wt/WAbstractTableModel>
 
+#include "locks.h"
+
+
+
 using namespace std;
 using boost::any;
 using boost::shared_ptr;
@@ -95,7 +99,7 @@ private:
   template< class DataListType >
   void dicomFind( const string &qrlevel, const string &QRModel, const string &param, const DcmTagKey &paramTag, const TagList &tags, DataListType &result );
   scoped_ptr<DcmQueryRetrieveDatabaseHandle> dbHandle;
-  boost::mutex index_mutex_;
+  shared_mutex index_mutex_;
 };
 
 
@@ -103,7 +107,7 @@ class IndexDispatcher {
     typedef string StorageAreaType;
     typedef map< StorageAreaType, Index::IndexPtr > IndexMapType;
     IndexMapType index_map_;
-    boost::mutex dispatcher_mutex_;
+    shared_mutex dispatcher_mutex_;
   public:
     Index::IndexPtr getIndexForStorageArea( const StorageAreaType &storage );
 };
