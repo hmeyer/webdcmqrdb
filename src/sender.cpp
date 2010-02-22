@@ -105,7 +105,7 @@ void Sender::updateJobStatus( SendJob &job, const string &status ) {
   boost::mutex::scoped_lock lock(joblist_mutex_);
   job.statusString = status;
 }
-void Sender::updateJobProgress( SendJob &job, int overallSize, int overallDone, int currentSize, float currentProgress ) {
+void Sender::updateJobProgress( SendJob &job, uintmax_t overallSize, uintmax_t overallDone, uintmax_t currentSize, float currentProgress ) {
   float progress;
   if (overallSize != 0) progress = 100.0 * (overallDone + currentSize * currentProgress)  / overallSize;
   else progress = 100.0;
@@ -118,11 +118,11 @@ void Sender::executeJob( SendJob &job) {
   Index::MoveJobList myJobList;
   job.index->moveRequest( job.level, job.uid, myJobList );
 
-  queue<int> fileSizes; int overallSize = 0;
+  queue<uintmax_t> fileSizes; uintmax_t overallSize = 0;
   
   Index::MoveJobList::iterator moveJobIt;
   for(moveJobIt = myJobList.begin(); moveJobIt != myJobList.end(); moveJobIt++) {
-    int size = 0;
+    uintmax_t size = 0;
     fs::path p( moveJobIt->imgFile );
     if (fs::exists( p ) && fs::is_regular( p ))
       size = fs::file_size( moveJobIt->imgFile );
@@ -137,19 +137,16 @@ void Sender::executeJob( SendJob &job) {
   
   
   try {
-    int currentFileSize; int transferredSize = 0;
+    uintmax_t currentFileSize; uintmax_t transferredSize = 0;
     boost::signals::scoped_connection statusConnection = mySender.onStatusUpdate( 
       bind(&Sender::updateJobStatus, this, job, _1) );
     boost::signals::scoped_connection progressConnection = mySender.onProgressUpdate( 
       bind(&Sender::updateJobProgress, this, job, ref(overallSize), ref(transferredSize), ref(currentFileSize), _1) );
     while (moveJobIt != myJobList.end()) {
       currentFileSize = fileSizes.front(); fileSizes.pop();
-      mySender.storeImage( moveJobIt->sopClass, moveJobIt->sopInstance, moveJobIt->imgFile );
+      mySender.storeImage( moveJobIt->sopClass, moveJobIt->sopInstance, moveJobIt->imgFile, currentFileSize );
       transferredSize += currentFileSize;
-      {
-	boost::mutex::scoped_lock lock(joblist_mutex_);
-	if (overallSize != 0) job.percentFinished = 100.0 * float(transferredSize) / overallSize;
-      }
+      updateJobProgress(job, overallSize, transferredSize, 0, 0);
       moveJobIt++;
     }
   } catch (std::exception &e) {

@@ -262,7 +262,7 @@ void DicomSender::detachAssociation(bool abortFlag) {
 }
 
 
-void DicomSender::storeImage(const string &sopClass, const string &sopInstance, const string &imgFile) {
+void DicomSender::storeImage(const string &sopClass, const string &sopInstance, const string &imgFile, uintmax_t filesize) {
   typedef scoped_ptr< DcmDataset > DcmDatasetPtr;
 
   updateStatus_( str( format( "starting transfer of %1%" ) % sopInstance ) );
@@ -303,6 +303,7 @@ void DicomSender::storeImage(const string &sopClass, const string &sopInstance, 
     DcmDataset *tstd = NULL;
     T_DIMSE_C_StoreRSP rsp;
     currentfileSize_ = DU_fileSize(imgFile.c_str());
+if (currentfileSize_ != filesize) cerr << "Warning: currentfileSize_ != filesize: " << currentfileSize_ << "!=" << filesize << endl;
     cond = DIMSE_storeUser(assoc_, presId, &req,
 	NULL, dcmff.getDataset(), storeProgressCallback, static_cast<void*>(this),
 	static_cast<T_DIMSE_BlockingMode>(blockMode_), dimse_timeout_,

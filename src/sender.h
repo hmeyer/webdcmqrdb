@@ -54,7 +54,7 @@ class Sender {
     void queueJob( DicomLevel l, const string &uid, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, const Index::IndexPtr index);
     JobTableModel &getTableModel(void);
     void updateJobStatus( SendJob &job, const string &status );
-    void updateJobProgress( SendJob &job, int overallSize,  int overallDone, int currentSize, float currentProgress );
+    void updateJobProgress( SendJob &job, uintmax_t overallSize,  uintmax_t overallDone, uintmax_t currentSize, float currentProgress );
     void setACSE_Timeout( int timeout );
     void setNumStoreRetries( int retries );
     void setMaxPDU( unsigned int mpdu );

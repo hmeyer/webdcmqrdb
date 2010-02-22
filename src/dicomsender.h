@@ -3,6 +3,7 @@
 
 #include <string>
 #include <boost/signal.hpp>
+#include <stdint.h>
 
 #include "dicomconfig.h"
 
@@ -31,7 +32,7 @@ class DicomSender {
   
   DicomSender( const string &localAE, DicomConfig::PeerInfoPtr peer, int numStoreRetries, int acse_timeout );
   ~DicomSender();
-  void storeImage(const string &sopClass, const string &sopInstance, const string &imgFile);
+  void storeImage(const string &sopClass, const string &sopInstance, const string &imgFile, uintmax_t filesize);
   boost::signals::connection onStatusUpdate( const StatusUpdateSignalType::slot_type &slot );
   boost::signals::connection onProgressUpdate( const ProgressUpdateSignalType::slot_type &slot );
   void setMaxReceivePDULength( int maxPDU ) { maxReceivePDULength_ = maxPDU; }
