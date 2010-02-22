@@ -25,22 +25,19 @@ using boost::ref;
 
 
 void Sender::queueJob( DicomLevel l, const string &uid, const string &desc, const string &myAE, const DicomConfig::PeerInfoPtr dest, const Index::IndexPtr index) {
-  unique_lock jobListLock(joblist_mutex_, get_system_time() + millisec(100));
-  if (!jobListLock) throw runtime_error("queueJob: Could not acquire unique joblist-Lock!");
+  unique_lock jobListLock(joblist_mutex_, millisec(100), "queueJob: did not get unique joblist-Lock:");
   jobs_[jobIndex_++] = SendJob(l,uid,desc,myAE,dest,index);
 }
 
 void Sender::workLoop(void) {
   while( !stopWork_ ) {
     {
-      shared_lock jobListLock(joblist_mutex_, get_system_time() + millisec(100));
-      if (!jobListLock) throw runtime_error("workLoop: Could not acquire shared joblist-Lock!");
+      shared_lock jobListLock(joblist_mutex_, millisec(100), "workLoop: did not get shared joblist-Lock:");
       JobListType::iterator myjobIt =  jobs_.begin();
       bool jobDone = false;
       while( !jobDone && myjobIt != jobs_.end()) {
 	SendJob &job = myjobIt->second;
-	unique_lock jobLock(*job.job_mutex_, get_system_time() + millisec(100));
-	if (!jobLock) throw runtime_error("workLoop: Could not acquire unique job-lock!");
+	unique_lock jobLock(*job.job_mutex_, millisec(100), "workLoop: did not get unique job-Lock:");
 	if (job.status == queued) {
 	  job.status = executing;
 	  jobLock.unlock();
@@ -48,8 +45,7 @@ void Sender::workLoop(void) {
 	  try {
 	    executeJob( job );
 	  } catch (std::exception &e) {
-	    unique_lock catchJobLock(*job.job_mutex_, get_system_time() + millisec(100));
-	    if (!catchJobLock) throw runtime_error("workLoop: Could not acquire unique job-lock!");
+	    unique_lock catchJobLock(*job.job_mutex_, millisec(100), "workLoop: did not get unique job-Lock:");
 	    myjobIt->second.status = aborted;
 	    myjobIt->second.statusString = e.what();
 	  }
@@ -87,23 +83,20 @@ int Sender::JobTableModel::columnCount(const WModelIndex &parent) const {
   return JobListHeader.size();
 }
 int Sender::JobTableModel::rowCount(const WModelIndex &parent) const {
-  shared_lock jobListLock( joblist_mutex_, get_system_time() + millisec(100));
-  if (!jobListLock) { return 0; }//throw runtime_error("workLoop: Could not acquire shared joblist-Lock!");
+  shared_lock jobListLock( joblist_mutex_, millisec(100), "rowCount: did not get shared joblist-Lock:");
   return joblist_.size();
 }
 const vector< string > statusString = boost::assign::list_of("queued")("executing")("successful")("aborted");
 any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
   int c = index.column();
   if (c < JobListHeader.size()) {
-    shared_lock jobListLock(joblist_mutex_, get_system_time() + millisec(20));
-    if (!jobListLock) return string("Could acquire shared jobList-Lock!");
+    shared_lock jobListLock(joblist_mutex_, millisec(20), "data: did not get shared jobList-Lock:");
     JobListType::const_iterator jobIt = joblist_.begin();
     int row = index.row();
     while(row && jobIt!=joblist_.end()) { row--; jobIt++; }
     if (jobIt != joblist_.end()) {
       const SendJob &j = jobIt->second;
-      shared_lock jobLock(*j.job_mutex_, get_system_time() + millisec(20));
-      if (!jobLock) return string("Could acquire shared job-Lock!");
+      shared_lock jobLock(*j.job_mutex_, millisec(20), "data: did not get shared job-Lock:");
       switch (c) {
 	case 0: return jobIt->first;
 	case 1: return j.description;
@@ -118,21 +111,18 @@ any Sender::JobTableModel::data(const WModelIndex &index, int role) const {
 }
 
 void Sender::updateJobStatus( SendJob &job, SenderStatus status ) {
-  unique_lock jobLock(*job.job_mutex_, get_system_time() + millisec(100));
-  if (!jobLock) throw runtime_error("workLoop: Could not acquire unique job-lock!");
+  unique_lock jobLock(*job.job_mutex_, millisec(100), "workLoop: did not get unique job-lock:");
   job.status = status;
 }
 void Sender::updateJobStatusString( SendJob &job, const string &status ) {
-  unique_lock jobLock(*job.job_mutex_, get_system_time() + millisec(100));
-  if (!jobLock) throw runtime_error("workLoop: Could not acquire unique job-lock!");
+  unique_lock jobLock(*job.job_mutex_, millisec(100), "workLoop: did not get unique job-lock:");
   job.statusString = status;
 }
 void Sender::updateJobProgress( SendJob &job, uintmax_t overallSize, uintmax_t overallDone, uintmax_t currentSize, float currentProgress ) {
   float progress;
   if (overallSize != 0) progress = 100.0 * (overallDone + currentSize * currentProgress)  / overallSize;
   else progress = 100.0;
-  unique_lock jobLock(*job.job_mutex_, get_system_time() + millisec(100));
-  if (!jobLock) throw runtime_error("workLoop: Could not acquire unique job-lock!");
+  unique_lock jobLock(*job.job_mutex_, millisec(100), "workLoop: did not get unique job-lock:");
   job.percentFinished = progress;
 }
 

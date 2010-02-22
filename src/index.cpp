@@ -79,8 +79,7 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
    
     DcmDatasetPtr reply;
     
-    unique_lock indexLock(index_mutex_, millisec(2000));  // TODO: index pool
-    if (!indexLock) throw runtime_error("dicomFind: Could not acquire unique index-lock!");
+    unique_lock indexLock(index_mutex_, millisec(2000), "dicomFind: Could not acquire unique index-lock!");  // TODO: index pool
     
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
@@ -156,8 +155,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   DU_putStringDOElement(&query, uidTag, uid.c_str());
   OFCondition dbcond = EC_Normal;
 
-  unique_lock indexLock(index_mutex_, millisec(2000));  // TODO: index pool
-  if (!indexLock) throw runtime_error("moveRequest: Could not acquire unique index-lock!");
+  unique_lock indexLock(index_mutex_, millisec(2000), "moveRequest: did not get unique index-lock:");  // TODO: index pool
   
   dbcond = dbHandle->startMoveRequest(
       QRModel.c_str(), &query, &dbStatus);      
@@ -176,8 +174,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
 }
 
 Index::IndexPtr IndexDispatcher::getIndexForStorageArea( const StorageAreaType &storage ) {
-  unique_lock dispatcherLock(dispatcher_mutex_, millisec(300)); 
-  if (!dispatcherLock) throw runtime_error("getIndexForStorageArea: Could not acquire unique dispatcher-lock!");
+  unique_lock dispatcherLock(dispatcher_mutex_, millisec(300), "getIndexForStorageArea: did not get unique dispatcher-lock:"); 
   
   IndexMapType::iterator currentIdx = index_map_.find( storage );
   if (currentIdx != index_map_.end()) {
