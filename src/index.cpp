@@ -83,14 +83,14 @@ void Index::dicomFind( const string &qrlevel, const string &QRModel, const strin
     
     dbcond = dbHandle->startFindRequest(
         QRModel.c_str(), query.get(), &dbStatus);
-    if (dbcond.bad()) throw std::runtime_error( "cannot query database:" );
+    if (dbcond.bad()) throw runtime_error( string("cannot query database:") + dbcond.text() );
 
     dbStatus.deleteStatusDetail();
     while(dbStatus.status() == STATUS_Pending) {
 	DcmDataset *tr;
         dbcond = dbHandle->nextFindResponse(&tr, &dbStatus);
 	reply.reset(tr);
-	if (dbcond.bad()) throw std::runtime_error( "database error" );
+	if (dbcond.bad()) throw runtime_error( string("database error") + dbcond.text() );
         if (dbStatus.status() == STATUS_Pending) {
 	  OFString t;
 	  typename DataListType::DataType item;
@@ -160,7 +160,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
   dbcond = dbHandle->startMoveRequest(
       QRModel.c_str(), &query, &dbStatus);      
       
-  if (dbcond.bad()) throw std::runtime_error( "cannot query database:" );
+  if (dbcond.bad()) throw runtime_error( string("cannot query database:") + dbcond.text() );
 
   MoveJob currentJob;
   DIC_US nRemaining = 0;
@@ -169,7 +169,7 @@ void Index::moveRequest(DicomLevel level, const string &uid, MoveJobList &result
 	  currentJob.imgFile, &nRemaining, &dbStatus);
       if (dbStatus.status() == STATUS_Pending) result.push_back( currentJob );
       if (dbcond.bad())
-	  throw std::runtime_error("database error");
+	  throw runtime_error( string("database error") + dbcond.text() );
   }
 }
 
